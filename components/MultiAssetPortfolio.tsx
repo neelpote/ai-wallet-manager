@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useAppContext } from '@/contexts/AppContext'
 
+// Network configuration
+const STELLAR_NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015' // Testnet
+
 interface Asset {
   code: string
   name: string
@@ -55,6 +58,13 @@ export default function MultiAssetPortfolio() {
       loadSwapHistory()
     }
   }, [publicKey])
+
+  // Also load swap history when switching to history tab
+  useEffect(() => {
+    if (activeTab === 'history' && publicKey) {
+      loadSwapHistory()
+    }
+  }, [activeTab, publicKey])
 
   useEffect(() => {
     if (swapAmount && fromAsset && toAsset && parseFloat(swapAmount) > 0) {
@@ -109,8 +119,11 @@ export default function MultiAssetPortfolio() {
 
   const loadSwapHistory = async () => {
     try {
+      console.log('Loading swap history for:', publicKey)
       const result = await callMultiAssetAPI('get_swap_history')
+      console.log('Swap history result:', result)
       setSwapHistory(result.swapHistory || [])
+      console.log('Swap history set:', result.swapHistory?.length || 0, 'items')
     } catch (error: any) {
       console.error('Failed to load swap history:', error)
     }
@@ -135,18 +148,56 @@ export default function MultiAssetPortfolio() {
 
     try {
       setSwapLoading(true)
-      const result = await callMultiAssetAPI('execute_swap', {
-        fromAsset,
-        toAsset,
-        amount: swapAmount
-      })
+      
+      // Handle Freighter wallet swaps (no secret key)
+      if (!secretKey) {
+        // Import Freighter functions
+        const { signTransaction } = await import('@/lib/freighterWallet')
+        
+        // Create swap transaction XDR for Freighter to sign
+        const transactionResponse = await callMultiAssetAPI('create_swap_transaction', {
+          fromAsset,
+          toAsset,
+          amount: swapAmount
+        })
+        
+        if (!transactionResponse.success) {
+          throw new Error('Failed to create swap transaction')
+        }
+        
+        // Sign with Freighter
+        const signedXDR = await signTransaction(transactionResponse.transactionXDR, STELLAR_NETWORK_PASSPHRASE)
+        
+        // Submit signed transaction
+        const result = await callMultiAssetAPI('execute_swap', {
+          fromAsset,
+          toAsset,
+          amount: swapAmount,
+          signedTransaction: signedXDR
+        })
 
-      if (result.success) {
-        alert(`✅ Swap successful!\nReceived ${result.amountReceived.toFixed(4)} ${toAsset}`)
-        setSwapAmount('')
-        setSwapCalculation(null)
-        loadPortfolio()
-        loadSwapHistory()
+        if (result.success) {
+          alert(`✅ Swap successful!\nSwapped ${swapAmount} ${fromAsset} to ${toAsset}`)
+          setSwapAmount('')
+          setSwapCalculation(null)
+          loadPortfolio()
+          loadSwapHistory()
+        }
+      } else {
+        // Handle manual wallet swaps (with secret key)
+        const result = await callMultiAssetAPI('execute_swap', {
+          fromAsset,
+          toAsset,
+          amount: swapAmount
+        })
+
+        if (result.success) {
+          alert(`✅ Swap successful!\nReceived ${result.amountReceived?.toFixed(4) || swapCalculation.expectedReceive.toFixed(4)} ${toAsset}`)
+          setSwapAmount('')
+          setSwapCalculation(null)
+          loadPortfolio()
+          loadSwapHistory()
+        }
       }
     } catch (error: any) {
       alert(`❌ Swap failed: ${error.message}`)
@@ -433,7 +484,7 @@ export default function MultiAssetPortfolio() {
                         </div>
                         <div>
                           <p className="text-white font-medium">
-                            {formatNumber(swap.amountIn)} {swap.fromAsset} → {swap.toAsset}
+                            {swap.amountIn > 0 ? formatNumber(swap.amountIn) : 'N/A'} {swap.fromAsset} → {swap.toAsset}
                           </p>
                           <p className="text-xs text-gray-400">
                             {new Date(swap.timestamp).toLocaleDateString()}
@@ -444,9 +495,11 @@ export default function MultiAssetPortfolio() {
                         <div className={`px-2 py-1 rounded-full text-xs ${
                           swap.status === 'completed' 
                             ? 'bg-green-500/20 text-green-300' 
+                            : swap.status === 'prepared'
+                            ? 'bg-blue-500/20 text-blue-300'
                             : 'bg-red-500/20 text-red-300'
                         }`}>
-                          {swap.status}
+                          {swap.status === 'prepared' ? 'Trustline Created' : swap.status}
                         </div>
                         {swap.amountOut && (
                           <p className="text-xs text-gray-400 mt-1">

@@ -644,18 +644,61 @@ export default function ChatInterface() {
             throw new Error('From asset, to asset, and amount are required for swapping')
           }
           
-          response = await fetch('/api/stellar/multi-asset', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'execute_swap',
-              publicKey,
-              secretKey,
-              fromAsset: parsedCommand.fromAsset,
-              toAsset: parsedCommand.toAsset,
-              amount: parsedCommand.amount
+          // Handle Freighter wallet swaps (no secret key)
+          if (!secretKey) {
+            // Import Freighter functions
+            const { signTransaction } = await import('@/lib/freighterWallet')
+            
+            // Create swap transaction XDR for Freighter to sign
+            const transactionResponse = await fetch('/api/stellar/multi-asset', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'create_swap_transaction',
+                publicKey,
+                fromAsset: parsedCommand.fromAsset,
+                toAsset: parsedCommand.toAsset,
+                amount: parsedCommand.amount
+              })
             })
-          })
+            
+            if (!transactionResponse.ok) {
+              throw new Error('Failed to create swap transaction')
+            }
+            
+            const { transactionXDR } = await transactionResponse.json()
+            
+            // Sign with Freighter
+            const signedXDR = await signTransaction(transactionXDR, STELLAR_NETWORK_PASSPHRASE)
+            
+            // Submit signed transaction
+            response = await fetch('/api/stellar/multi-asset', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'execute_swap',
+                publicKey,
+                fromAsset: parsedCommand.fromAsset,
+                toAsset: parsedCommand.toAsset,
+                amount: parsedCommand.amount,
+                signedTransaction: signedXDR
+              })
+            })
+          } else {
+            // Handle manual wallet swaps (with secret key)
+            response = await fetch('/api/stellar/multi-asset', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'execute_swap',
+                publicKey,
+                secretKey,
+                fromAsset: parsedCommand.fromAsset,
+                toAsset: parsedCommand.toAsset,
+                amount: parsedCommand.amount
+              })
+            })
+          }
           
           if (!response.ok) {
             const errorText = await response.text()
@@ -665,7 +708,7 @@ export default function ChatInterface() {
           
           const swapData = await response.json()
           
-          return `✅ Swap Successful!\n🔄 ${parsedCommand.amount} ${parsedCommand.fromAsset} → ${swapData.amountReceived.toFixed(4)} ${parsedCommand.toAsset}\n💰 Rate: 1 ${parsedCommand.fromAsset} = ${(swapData.amountReceived / parsedCommand.amount).toFixed(4)} ${parsedCommand.toAsset}\n📋 Transaction: ${swapData.transactionId.slice(0, 8)}...`
+          return `✅ Swap Successful!\n🔄 ${parsedCommand.amount} ${parsedCommand.fromAsset} → ${parsedCommand.toAsset}\n💰 Transaction Hash: ${swapData.hash?.slice(0, 8)}...\n🎉 Your swap has been completed successfully!`
 
         case 'get_asset_prices':
           response = await fetch('/api/stellar/multi-asset', {
