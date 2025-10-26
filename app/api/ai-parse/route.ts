@@ -45,7 +45,81 @@ function calculateConfidence(command: string, parsedResult: any): number {
   return Math.min(confidence, 1.0);
 }
 
-// Enhanced fallback parser for when AI is not available
+// Enhanced fallback parser with advanced features
+function parseCommandFallbackEnhanced(command: string) {
+  const cmd = command.toLowerCase().trim();
+  
+  // Handle asset aliases first
+  let processedCmd = cmd;
+  Object.entries(ASSET_ALIASES).forEach(([alias, asset]) => {
+    const regex = new RegExp(`\\b${alias}\\b`, 'gi');
+    processedCmd = processedCmd.replace(regex, asset);
+  });
+  
+  // Handle relative amounts
+  const relativeAmounts = {
+    'half': '50%',
+    'all': '100%',
+    'everything': '100%',
+    'some': '10',
+    'little': '5',
+    'bit': '5'
+  };
+  
+  Object.entries(relativeAmounts).forEach(([phrase, amount]) => {
+    if (processedCmd.includes(phrase)) {
+      processedCmd = processedCmd.replace(phrase, amount);
+    }
+  });
+
+  // Enhanced natural language patterns
+  
+  // Balance commands with more variations
+  if (processedCmd.match(/how much|what.*have|money.*have|balance|funds|worth/)) {
+    return { action: 'balance', amount: null, recipient: null, limit: null };
+  }
+  
+  // Portfolio commands
+  if (processedCmd.match(/portfolio|assets|holdings|what.*own/)) {
+    return { action: 'get_portfolio', amount: null, recipient: null, limit: null };
+  }
+  
+  // Swap/trade commands with natural language
+  const swapMatch = processedCmd.match(/(swap|trade|convert|exchange)\s*(\d+(?:\.\d+)?|\d+%)?\s*(xlm|usdc|eurc|aqua|ybx)?\s*(?:to|for|into)\s*(xlm|usdc|eurc|aqua|ybx)/i);
+  if (swapMatch) {
+    return {
+      action: 'swap_tokens',
+      amount: swapMatch[2] ? parseFloat(swapMatch[2]) : 10,
+      fromAsset: swapMatch[3] ? swapMatch[3].toUpperCase() : 'XLM',
+      toAsset: swapMatch[4] ? swapMatch[4].toUpperCase() : 'USDC',
+      recipient: null,
+      limit: null
+    };
+  }
+  
+  // Price commands
+  if (processedCmd.match(/price|rate|cost|worth.*xlm|worth.*usd/)) {
+    return { action: 'get_asset_prices', amount: null, recipient: null, limit: null };
+  }
+  
+  // Security/safety commands
+  if (processedCmd.match(/safe|secure|status|protection|frozen|freeze/)) {
+    if (processedCmd.match(/lock|freeze|emergency|stop/)) {
+      return { action: 'freeze_wallet', amount: null, recipient: null, limit: null };
+    }
+    return { action: 'get_spending_info', amount: null, recipient: null, limit: null };
+  }
+  
+  // Fallback to original parser
+  try {
+    return parseCommandFallback(processedCmd);
+  } catch (error) {
+    // If all else fails, return a balance check
+    return { action: 'balance', amount: null, recipient: null, limit: null };
+  }
+}
+
+// Original fallback parser for when AI is not available
 function parseCommandFallback(command: string) {
   const cmd = command.toLowerCase().trim();
   
@@ -476,68 +550,86 @@ function parseCommandFallback(command: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { command } = await request.json();
+    const { command, publicKey, context } = await request.json();
 
-    // Try AI first, fallback to simple parser
+    // Simple test response first
+    if (!command) {
+      return NextResponse.json({ error: 'Command is required' }, { status: 400 });
+    }
+
+    // Store conversation context
+    if (publicKey && context) {
+      conversationContext.set(publicKey, context);
+    }
+
+    // Try enhanced fallback parser first (more reliable)
     try {
-      const prompt = `You are a crypto wallet AI assistant. Parse this natural language command and return ONLY valid JSON.
+      const parsed = parseCommandFallbackEnhanced(command);
+      
+      // Add advanced features
+      parsed.confidence = calculateConfidence(command, parsed);
+      parsed.originalIntent = command;
+      parsed.conversational = true;
+
+      return NextResponse.json(parsed);
+    } catch (fallbackError) {
+      console.log("Enhanced fallback failed, trying AI:", fallbackError);
+      
+      // Try AI as backup
+      try {
+        const prompt = `Parse this crypto wallet command and return ONLY valid JSON:
 
 Command: "${command}"
 
-Return format (must be valid JSON):
+Return format:
 {
-  "action": "send" | "balance" | "history" | "set_limit" | "check_limit" | "save_contact" | "save_contact_to_contract" | "list_contacts" | "list_contract_contacts" | "send_to_contact" | "set_daily_limit" | "set_monthly_limit" | "freeze_wallet" | "unfreeze_wallet" | "get_spending_info" | "reset_spending_limits" | "get_spending_analytics" | "set_contact_trusted" | "get_portfolio" | "swap_tokens" | "get_asset_prices" | "get_swap_history" | "calculate_swap",
+  "action": "balance" | "send" | "swap_tokens" | "get_portfolio" | "freeze_wallet" | "get_asset_prices",
   "amount": number or null,
-  "recipient": "full stellar address starting with G" or null,
-  "limit": number or null,
-  "contactName": "contact name" or null,
-  "contractAction": "smart contract function name" or null,
-  "fromAsset": "asset code like XLM, USDC" or null,
-  "toAsset": "asset code like XLM, USDC" or null,
-  "assetCode": "single asset code" or null
+  "fromAsset": "XLM" | "USDC" | "EURC" | null,
+  "toAsset": "XLM" | "USDC" | "EURC" | null,
+  "confidence": 0.8
 }
 
-Rules:
-- For send: extract amount and recipient address
-- For balance: just check balance
-- For history: show transaction history
-- Recipient must be a full Stellar address (starts with G, 56 chars)
-- Only return the JSON object, no markdown, no explanation
-
 Examples:
-"Send 10 XLM to GXXXXXXXXX" -> {"action":"send","amount":10,"recipient":"GXXXXXXXXX","limit":null,"contactName":null}
-"What's my balance?" -> {"action":"balance","amount":null,"recipient":null,"limit":null,"contactName":null}
-"Save GXXX as John" -> {"action":"save_contact","amount":null,"recipient":"GXXX","limit":null,"contactName":"John"}
-"Send 5 XLM to John" -> {"action":"send_to_contact","amount":5,"recipient":null,"limit":null,"contactName":"John"}
-"List contacts" -> {"action":"list_contacts","amount":null,"recipient":null,"limit":null,"contactName":null}`;
+"What's my balance?" -> {"action":"balance","amount":null,"fromAsset":null,"toAsset":null,"confidence":0.9}
+"Swap 10 XLM to USDC" -> {"action":"swap_tokens","amount":10,"fromAsset":"XLM","toAsset":"USDC","confidence":0.9}`;
 
-      const result = await model.generateContent(prompt);
-      const text = result.response.text().trim();
-
-      // Remove markdown code blocks if present
-      const jsonText = text
-        .replace(/```json\n?/g, "")
-        .replace(/```\n?/g, "")
-        .trim();
-
-      const parsed = JSON.parse(jsonText);
-
-      if (!parsed.action) {
-        throw new Error("Invalid command format");
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+        const jsonText = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        
+        const parsed = JSON.parse(jsonText);
+        parsed.originalIntent = command;
+        parsed.conversational = true;
+        
+        return NextResponse.json(parsed);
+      } catch (aiError) {
+        console.log("AI parsing also failed:", aiError);
+        
+        // Return basic fallback
+        return NextResponse.json({
+          action: 'balance',
+          amount: null,
+          fromAsset: null,
+          toAsset: null,
+          confidence: 0.3,
+          originalIntent: command,
+          conversational: true,
+          error: 'Could not parse command, defaulting to balance check'
+        });
       }
-
-      return NextResponse.json(parsed);
-    } catch (aiError) {
-      console.log("AI parsing failed, using fallback parser:", aiError);
-      
-      // Use fallback parser
-      const parsed = parseCommandFallback(command);
-      return NextResponse.json(parsed);
     }
   } catch (error: any) {
     console.error("Parsing error:", error);
     return NextResponse.json(
-      { error: 'Could not understand command. Try: "What\'s my balance?" or "Send 10 XLM to GXXX..."' },
+      { 
+        error: 'I had trouble understanding that. Could you try rephrasing?',
+        suggestions: [
+          'Try: "What\'s my balance?"',
+          'Try: "Swap 10 XLM to USDC"',
+          'Try: "Show my portfolio"'
+        ]
+      },
       { status: 400 }
     );
   }

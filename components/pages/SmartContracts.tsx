@@ -58,10 +58,10 @@ export default function SmartContracts() {
   }
 
   useEffect(() => {
-    if (publicKey && secretKey) {
+    if (publicKey) {
       loadContractStatus()
     }
-  }, [publicKey, secretKey])
+  }, [publicKey])
 
   const handleAddContact = async () => {
     if (!contactName || !contactAddress) {

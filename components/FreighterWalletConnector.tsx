@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import FreighterLogin from './FreighterLogin'
-import { freighterWallet } from '@/lib/freighterWallet'
+import { connectWallet, isWalletInstalled } from '@/lib/freighterWallet'
 import { useAppContext } from '@/contexts/AppContext'
 
 export default function FreighterWalletConnector() {
@@ -17,7 +17,7 @@ export default function FreighterWalletConnector() {
   useEffect(() => {
     // Check if Freighter is available
     const checkFreighter = async () => {
-      const available = await freighterWallet.isAvailable()
+      const available = await isWalletInstalled()
       setFreighterAvailable(available)
     }
     

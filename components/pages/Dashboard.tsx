@@ -55,11 +55,11 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    if (publicKey && secretKey) {
+    if (publicKey) {
       fetchBalance()
       fetchSpendingInfo()
     }
-  }, [publicKey, secretKey])
+  }, [publicKey])
 
   return (
     <div className="space-y-8">

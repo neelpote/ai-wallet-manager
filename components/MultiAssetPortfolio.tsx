@@ -385,7 +385,7 @@ export default function MultiAssetPortfolio() {
                 {/* Swap Button */}
                 <button
                   onClick={executeSwap}
-                  disabled={!swapAmount || !swapCalculation || swapLoading || !secretKey}
+                  disabled={!swapAmount || !swapCalculation || swapLoading || !publicKey}
                   className="w-full py-4 px-6 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-500 disabled:to-gray-600 text-white font-semibold rounded-xl transition-all duration-300 disabled:cursor-not-allowed"
                 >
                   {swapLoading ? (
@@ -393,7 +393,7 @@ export default function MultiAssetPortfolio() {
                       <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></div>
                       Swapping...
                     </div>
-                  ) : !secretKey ? (
+                  ) : !publicKey ? (
                     'Connect Wallet to Swap'
                   ) : (
                     `Swap ${swapAmount || '0'} ${fromAsset} → ${toAsset}`

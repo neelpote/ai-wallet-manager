@@ -13,18 +13,22 @@ export default function SpendingLimits() {
   const callSmartContract = async (action: string, params: any = {}) => {
     setLoading(true)
     try {
+      const requestBody = {
+        action,
+        publicKey,
+        secretKey,
+        ...params
+      }
+      console.log('Smart contract request:', requestBody)
+      
       const response = await fetch('/api/stellar/smart-limit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          publicKey,
-          secretKey,
-          ...params
-        })
+        body: JSON.stringify(requestBody)
       })
 
       const data = await response.json()
+      console.log('Smart contract response:', data)
       
       if (!response.ok) {
         throw new Error(data.error || 'Smart contract call failed')
@@ -32,6 +36,7 @@ export default function SpendingLimits() {
 
       return data
     } catch (error: any) {
+      console.error('Smart contract error:', error)
       alert(`Error: ${error.message}`)
       throw error
     } finally {
@@ -41,16 +46,22 @@ export default function SpendingLimits() {
 
   const loadSpendingInfo = async () => {
     try {
+      console.log('Loading spending info for publicKey:', publicKey)
       const result = await callSmartContract('get_spending_info')
+      console.log('Spending info result:', result)
       
       if (result.spendingInfo) {
-        updateSpendingInfo({
+        const newSpendingInfo = {
           dailyLimit: result.spendingInfo.dailyLimit || 1000,
           dailySpent: result.spendingInfo.dailySpent || 0,
           monthlyLimit: result.spendingInfo.monthlyLimit || 10000,
           monthlySpent: result.spendingInfo.monthlySpent || 0,
           isFrozen: result.spendingInfo.isFrozen || false
-        })
+        }
+        console.log('Updating spending info with:', newSpendingInfo)
+        updateSpendingInfo(newSpendingInfo)
+      } else {
+        console.warn('No spendingInfo in result:', result)
       }
     } catch (error) {
       console.error('Failed to load spending info:', error)
@@ -58,10 +69,10 @@ export default function SpendingLimits() {
   }
 
   useEffect(() => {
-    if (publicKey && secretKey) {
+    if (publicKey) {
       loadSpendingInfo()
     }
-  }, [publicKey, secretKey])
+  }, [publicKey])
 
   const handleSetDailyLimit = async () => {
     if (!dailyLimit) {
@@ -69,13 +80,26 @@ export default function SpendingLimits() {
       return
     }
     
+    const limitValue = parseFloat(dailyLimit)
+    if (isNaN(limitValue) || limitValue <= 0) {
+      alert('Please enter a valid positive number')
+      return
+    }
+    
     try {
-      await callSmartContract('set_daily_limit', { dailyLimit: parseFloat(dailyLimit) })
+      console.log('Setting daily limit:', limitValue, 'for publicKey:', publicKey)
+      const result = await callSmartContract('set_daily_limit', { dailyLimit: limitValue })
+      console.log('Daily limit result:', result)
+      
       alert(`🔒 Daily spending limit set to ${dailyLimit} XLM`)
       setDailyLimit('')
-      loadSpendingInfo()
-    } catch (error) {
+      
+      // Force reload spending info
+      await loadSpendingInfo()
+      console.log('Spending info reloaded after setting daily limit')
+    } catch (error: any) {
       console.error('Daily limit error:', error)
+      alert(`Failed to set daily limit: ${error.message}`)
     }
   }
 
@@ -85,13 +109,26 @@ export default function SpendingLimits() {
       return
     }
     
+    const limitValue = parseFloat(monthlyLimit)
+    if (isNaN(limitValue) || limitValue <= 0) {
+      alert('Please enter a valid positive number')
+      return
+    }
+    
     try {
-      await callSmartContract('set_monthly_limit', { monthlyLimit: parseFloat(monthlyLimit) })
+      console.log('Setting monthly limit:', limitValue, 'for publicKey:', publicKey)
+      const result = await callSmartContract('set_monthly_limit', { monthlyLimit: limitValue })
+      console.log('Monthly limit result:', result)
+      
       alert(`🔒 Monthly spending limit set to ${monthlyLimit} XLM`)
       setMonthlyLimit('')
-      loadSpendingInfo()
-    } catch (error) {
+      
+      // Force reload spending info
+      await loadSpendingInfo()
+      console.log('Spending info reloaded after setting monthly limit')
+    } catch (error: any) {
       console.error('Monthly limit error:', error)
+      alert(`Failed to set monthly limit: ${error.message}`)
     }
   }
 

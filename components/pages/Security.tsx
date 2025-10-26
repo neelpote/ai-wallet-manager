@@ -25,15 +25,22 @@ export default function Security() {
         })
       })
 
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Smart contract API error:', response.status, errorText)
+        throw new Error(`API Error (${response.status}): ${errorText.includes('<!DOCTYPE') ? 'Service temporarily unavailable' : errorText}`)
+      }
+
       const data = await response.json()
       
-      if (!response.ok) {
+      if (!data.success) {
         throw new Error(data.error || 'Smart contract call failed')
       }
 
       return data
     } catch (error: any) {
-      alert(`Error: ${error.message}`)
+      console.error('Smart contract error:', error)
+      alert(`Security Error: ${error.message}`)
       throw error
     } finally {
       setLoading(false)
@@ -58,10 +65,10 @@ export default function Security() {
   }
 
   useEffect(() => {
-    if (publicKey && secretKey) {
+    if (publicKey) {
       loadSecurityStatus()
     }
-  }, [publicKey, secretKey])
+  }, [publicKey])
 
   const handleFreezeWallet = async () => {
     if (confirm('⚠️ Are you sure you want to FREEZE your wallet?\n\nThis will block ALL transactions until you unfreeze it.')) {

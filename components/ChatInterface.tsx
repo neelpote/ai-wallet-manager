@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react'
 
 import { useAppContext } from '@/contexts/AppContext'
 
+// Network configuration
+const STELLAR_NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015' // Testnet
+
 interface Message {
   id: string
   text: string
@@ -17,7 +20,7 @@ export default function ChatInterface() {
   
   const getDefaultWelcomeMessage = (): Message => ({
     id: '1',
-    text: 'Hi! I can help you manage your Stellar wallet with AI + Smart Contract power! Try:\n\n💰 Basic Commands:\n• "What\'s my balance?"\n• "Send 10 XLM to GXXX..."\n• "List contacts"\n\n🔄 Multi-Asset & Swapping:\n• "Show my portfolio"\n• "Swap 100 XLM to USDC"\n• "Convert 50 USDC to XLM"\n• "What\'s the price of USDC?"\n• "Check trustlines"\n• "Swap history"\n\n🔒 Smart Contract Security:\n• "Freeze" or "Freeze my wallet"\n• "Unfreeze" or "Unfreeze my wallet"\n• "Daily limit 500" or "Set daily limit to 500 XLM"\n• "Status" or "Check spending limits"\n\n👥 Save Contacts:\n• "Save GXXX as Alice" (local)\n• "Save contract Alice GXXX" (blockchain)',
+    text: 'Hi! I\'m your advanced AI wallet assistant! 🤖✨ I understand natural language, so just talk to me normally!\n\n🗣️ **Talk Naturally - Try These:**\n• "How much money do I have?"\n• "Send some stellar to Alice"\n• "Swap half my lumens for dollars"\n• "Is my wallet safe right now?"\n• "What\'s my USDC worth in XLM?"\n\n🧠 **I\'m Smart About:**\n• **Typos**: "XML" → I know you mean XLM\n• **Aliases**: "stellar/lumens" = XLM, "dollars" = USDC\n• **Amounts**: "half", "all", "some", "10%"\n• **Context**: I remember our conversation\n• **Safety**: I\'ll ask before risky actions\n\n💡 **Advanced Examples:**\n• "Lock everything down!" (emergency freeze)\n• "Trade some aqua tokens for euros"\n• "Can you check if I have enough to send 100 XLM?"\n• "What should I do to make my wallet safer?"\n\nJust speak naturally - I\'ll figure out what you want! 🚀',
     isUser: false,
     timestamp: new Date()
   })
@@ -132,9 +135,88 @@ export default function ChatInterface() {
     }
   }
 
+  const calculateRelativeAmount = async (percentageStr: string, assetCode: string): Promise<number> => {
+    try {
+      const percentage = parseFloat(percentageStr.replace('%', ''))
+      
+      if (assetCode === 'XLM') {
+        // Get XLM balance
+        const response = await fetch('/api/stellar/balance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ publicKey })
+        })
+        const data = await response.json()
+        const balance = parseFloat(data.balance || '0')
+        return (balance * percentage) / 100
+      } else {
+        // Get multi-asset portfolio for other assets
+        const response = await fetch('/api/stellar/multi-asset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'get_portfolio',
+            publicKey
+          })
+        })
+        const data = await response.json()
+        const asset = data.portfolio?.assets?.[assetCode]
+        const balance = asset ? parseFloat(asset.balance) : 0
+        return (balance * percentage) / 100
+      }
+    } catch (error) {
+      console.error('Error calculating relative amount:', error)
+      return 0
+    }
+  }
+
+  const generateSmartSuggestion = (parsedCommand: any): string => {
+    const suggestions = [
+      "🤖 **Smart Suggestions Based on Your Activity:**\n",
+      "💡 **Popular Actions:**",
+      "• Check your portfolio value: \"What's my portfolio worth?\"",
+      "• Set up security: \"Make my wallet safer\"",
+      "• Quick swap: \"Trade some XLM for USDC\"",
+      "• Check prices: \"What's the best rate for swapping?\"",
+      "\n🔮 **Predictive Suggestions:**",
+      "• Based on your balance, you might want to diversify",
+      "• Consider setting spending limits for security",
+      "• Your XLM could earn more if swapped to USDC",
+      "\n💬 **Try Natural Language:**",
+      "• \"Should I swap now or wait?\"",
+      "• \"What's the safest amount to keep in XLM?\"",
+      "• \"Help me understand my portfolio\"",
+      "• \"What would you do with my assets?\""
+    ].join('\n')
+
+    return suggestions
+  }
+
+  const getSmartPlaceholder = (): string => {
+    const placeholders = [
+      "Try: 'How much money do I have?'",
+      "Ask: 'Swap some stellar for dollars'",
+      "Say: 'Is my wallet safe right now?'",
+      "Try: 'What should I do with my assets?'",
+      "Ask: 'Trade half my XLM for USDC'",
+      "Say: 'Lock everything down!'",
+      "Try: 'What's my USDC worth?'",
+      "Ask: 'Send some lumens to Alice'"
+    ]
+    
+    // Rotate placeholder based on time to keep it fresh
+    const index = Math.floor(Date.now() / 10000) % placeholders.length
+    return placeholders[index]
+  }
+
   const executeCommand = async (parsedCommand: any) => {
     try {
       let response
+      
+      // Handle relative amounts (50%, all, etc.)
+      if (parsedCommand.amount && typeof parsedCommand.amount === 'string' && parsedCommand.amount.includes('%')) {
+        parsedCommand.amount = await calculateRelativeAmount(parsedCommand.amount, parsedCommand.fromAsset || 'XLM')
+      }
       
       switch (parsedCommand.action) {
         case 'balance':
@@ -157,16 +239,56 @@ export default function ChatInterface() {
           if (!parsedCommand.amount || !parsedCommand.recipient) {
             throw new Error('Amount and recipient are required for sending')
           }
-          response = await fetch('/api/stellar/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              publicKey,
-              secretKey,
-              recipient: parsedCommand.recipient,
-              amount: parsedCommand.amount
+          
+          // Handle Freighter wallet transactions (no secret key)
+          if (!secretKey) {
+            // Import Freighter functions
+            const { signTransaction } = await import('@/lib/freighterWallet')
+            
+            // Create transaction XDR for Freighter to sign
+            const transactionResponse = await fetch('/api/stellar/create-transaction', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                publicKey,
+                recipient: parsedCommand.recipient,
+                amount: parsedCommand.amount
+              })
             })
-          })
+            
+            if (!transactionResponse.ok) {
+              throw new Error('Failed to create transaction')
+            }
+            
+            const { transactionXDR } = await transactionResponse.json()
+            
+            // Sign with Freighter (using testnet)
+            const signedXDR = await signTransaction(transactionXDR, STELLAR_NETWORK_PASSPHRASE)
+            
+            // Submit signed transaction
+            response = await fetch('/api/stellar/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                publicKey,
+                recipient: parsedCommand.recipient,
+                amount: parsedCommand.amount,
+                signedTransaction: signedXDR
+              })
+            })
+          } else {
+            // Handle manual wallet transactions (with secret key)
+            response = await fetch('/api/stellar/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                publicKey,
+                secretKey,
+                recipient: parsedCommand.recipient,
+                amount: parsedCommand.amount
+              })
+            })
+          }
           break
           
         case 'set_limit':
@@ -248,16 +370,54 @@ export default function ChatInterface() {
           }
           
           // Send to the contact's address
-          response = await fetch('/api/stellar/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              publicKey,
-              secretKey,
-              recipient: contactAddress,
-              amount: parsedCommand.amount
+          if (!secretKey) {
+            // Handle Freighter wallet transactions (no secret key)
+            const { signTransaction } = await import('@/lib/freighterWallet')
+            
+            // Create transaction XDR for Freighter to sign
+            const transactionResponse = await fetch('/api/stellar/create-transaction', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                publicKey,
+                recipient: contactAddress,
+                amount: parsedCommand.amount
+              })
             })
-          })
+            
+            if (!transactionResponse.ok) {
+              throw new Error('Failed to create transaction')
+            }
+            
+            const { transactionXDR } = await transactionResponse.json()
+            
+            // Sign with Freighter (using testnet)
+            const signedXDR = await signTransaction(transactionXDR, STELLAR_NETWORK_PASSPHRASE)
+            
+            // Submit signed transaction
+            response = await fetch('/api/stellar/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                publicKey,
+                recipient: contactAddress,
+                amount: parsedCommand.amount,
+                signedTransaction: signedXDR
+              })
+            })
+          } else {
+            // Handle manual wallet transactions (with secret key)
+            response = await fetch('/api/stellar/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                publicKey,
+                secretKey,
+                recipient: contactAddress,
+                amount: parsedCommand.amount
+              })
+            })
+          }
           
           const sendData = await response.json()
           if (!response.ok) {
@@ -637,6 +797,9 @@ export default function ChatInterface() {
           }
           
           return trustlinesText
+
+        case 'smart_suggestion':
+          return generateSmartSuggestion(parsedCommand)
           
         default:
           throw new Error('Unknown command')
@@ -685,30 +848,120 @@ export default function ChatInterface() {
     setLoading(true)
 
     try {
-      // Parse command with AI
+      // Prepare context for AI
+      const context = {
+        hasWallet: !!publicKey,
+        recentMessages: messages.slice(-5).map(m => ({ text: m.text, isUser: m.isUser })),
+        contacts: contacts.map(c => c.name)
+      }
+
+      // Parse command with enhanced AI
       const parseResponse = await fetch('/api/ai-parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: userMessage })
+        body: JSON.stringify({ 
+          command: userMessage,
+          publicKey,
+          context
+        })
       })
 
       const parsedCommand = await parseResponse.json()
       console.log('Parsed command:', parsedCommand);
       
       if (!parseResponse.ok) {
-        throw new Error(parsedCommand.error || 'Failed to understand command')
+        // Enhanced error handling with suggestions
+        if (parsedCommand.suggestions) {
+          const errorMsg = `${parsedCommand.error}\n\n💡 Suggestions:\n${parsedCommand.suggestions.map((s: string) => `• ${s}`).join('\n')}`
+          addMessage(errorMsg, false)
+        } else {
+          addMessage(`I didn't understand that. ${parsedCommand.error}`, false)
+        }
+        return
+      }
+
+      // Handle low confidence commands
+      if (parsedCommand.confidence < 0.6) {
+        let confirmationMsg = `I think you want to ${parsedCommand.action.replace('_', ' ')}`
+        if (parsedCommand.suggestions && parsedCommand.suggestions.length > 0) {
+          confirmationMsg += `\n\n🤔 Did you mean:\n${parsedCommand.suggestions.map((s: string) => `• ${s}`).join('\n')}`
+        }
+        confirmationMsg += `\n\nShould I proceed? (Type 'yes' to confirm)`
+        addMessage(confirmationMsg, false)
+        return
+      }
+
+      // Handle commands requiring confirmation
+      if (parsedCommand.requiresConfirmation) {
+        const confirmationMsg = generateConfirmationMessage(parsedCommand)
+        addMessage(confirmationMsg, false)
+        return
       }
 
       // Execute the parsed command
       console.log('Executing command:', parsedCommand.action);
       const result = await executeCommand(parsedCommand)
-      addMessage(result, false)
+      
+      // Add conversational response
+      const conversationalResult = addConversationalTouch(result, parsedCommand)
+      addMessage(conversationalResult, false)
       
     } catch (error: any) {
-      addMessage(`Error: ${error.message}`, false)
+      const friendlyError = makeFriendlyError(error.message, userMessage)
+      addMessage(friendlyError, false)
     } finally {
       setLoading(false)
     }
+  }
+
+  const generateConfirmationMessage = (parsedCommand: any): string => {
+    switch (parsedCommand.action) {
+      case 'freeze_wallet':
+        return `🚨 You want to freeze your wallet. This will block ALL transactions until you unfreeze it.\n\nAre you sure? Type 'yes' to confirm.`
+      
+      case 'send':
+      case 'send_to_contact':
+        const amount = parsedCommand.amount || 'some'
+        const recipient = parsedCommand.contactName || parsedCommand.recipient?.slice(0, 8) + '...'
+        return `💸 You want to send ${amount} ${parsedCommand.fromAsset || 'XLM'} to ${recipient}.\n\nShould I proceed? Type 'yes' to confirm.`
+      
+      case 'swap_tokens':
+        return `🔄 You want to swap ${parsedCommand.amount || 'some'} ${parsedCommand.fromAsset} to ${parsedCommand.toAsset}.\n\nLet me calculate the rate first. Type 'yes' to proceed.`
+      
+      default:
+        return `I want to make sure I understood correctly. You want me to ${parsedCommand.action.replace('_', ' ')}?\n\nType 'yes' to confirm.`
+    }
+  }
+
+  const addConversationalTouch = (result: string, parsedCommand: any): string => {
+    if (!parsedCommand.conversational) return result
+
+    const conversationalPrefixes = [
+      "Here's what I found:",
+      "Got it! Here you go:",
+      "Perfect! Here's the info:",
+      "All set! Here's what you need:",
+      "Done! Here are the details:"
+    ]
+
+    const randomPrefix = conversationalPrefixes[Math.floor(Math.random() * conversationalPrefixes.length)]
+    return `${randomPrefix}\n\n${result}`
+  }
+
+  const makeFriendlyError = (error: string, originalCommand: string): string => {
+    if (error.includes('trustline')) {
+      return `🔗 Looks like you need to set up a trustline first!\n\n${error}\n\n💡 Try: "Check trustlines" to see what you need to set up.`
+    }
+    
+    if (error.includes('balance')) {
+      return `💰 Not enough funds for that transaction.\n\n${error}\n\n💡 Try: "What's my balance?" to check your available funds.`
+    }
+    
+    if (error.includes('contact')) {
+      return `👥 I couldn't find that contact.\n\n${error}\n\n💡 Try: "List contacts" to see who you have saved.`
+    }
+    
+    return `Hmm, something went wrong: ${error}\n\n💡 You said: "${originalCommand}"\nTry rephrasing or ask for help!`
   }
 
   return (
@@ -796,7 +1049,7 @@ export default function ChatInterface() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Try: 'Send 10 XLM to Alice' or 'What's my balance?'"
+              placeholder={getSmartPlaceholder()}
               className="w-full pl-12 pr-4 py-4 text-base rounded-2xl bg-white/10 border border-white/20 text-white placeholder:text-white/50 focus:outline-none focus:border-white/40 focus:bg-white/15 transition-all duration-300 backdrop-blur-sm relative z-10"
               disabled={loading}
               style={{ 
@@ -821,22 +1074,25 @@ export default function ChatInterface() {
           </button>
         </form>
         
-        {/* Quick Commands */}
+        {/* Quick Commands - Natural Language */}
         <div className="mt-4 flex flex-wrap gap-2 justify-between">
           <div className="flex flex-wrap gap-2">
-            {['Balance', 'Portfolio', 'Trustlines', 'Swap', 'Prices', 'Status'].map((cmd, index) => (
+            {[
+              { label: 'Balance', cmd: "How much money do I have?" },
+              { label: 'Portfolio', cmd: "Show my assets" },
+              { label: 'Swap', cmd: "Trade some XLM for USDC" },
+              { label: 'Safety', cmd: "Is my wallet safe?" },
+              { label: 'Prices', cmd: "What are the current rates?" },
+              { label: 'Help', cmd: "What can you help me with?" }
+            ].map((item, index) => (
               <button
-                key={cmd}
-                onClick={() => setInput(cmd === 'Balance' ? "What's my balance?" : 
-                                       cmd === 'Portfolio' ? "Show my portfolio" :
-                                       cmd === 'Trustlines' ? "Check trustlines" :
-                                       cmd === 'Swap' ? "Swap 100 XLM to USDC" :
-                                       cmd === 'Prices' ? "What's the price of USDC?" :
-                                       "Status")}
+                key={item.label}
+                onClick={() => setInput(item.cmd)}
                 className="px-3 py-1 text-xs rounded-full bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40 transition-all duration-300 hover:scale-105"
                 style={{animationDelay: `${index * 0.1}s`}}
+                title={item.cmd}
               >
-                {cmd}
+                {item.label}
               </button>
             ))}
           </div>

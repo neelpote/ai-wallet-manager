@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { freighterWallet, detectFreighterInstallation, getFreighterInstallUrl } from '@/lib/freighterWallet'
+import { connectWallet, isWalletInstalled, detectFreighterInstallation, getFreighterInstallUrl } from '@/lib/freighterWallet'
 import { needsFreighterActivation, triggerFreighterInjection } from '@/lib/extensionDetection'
 import { useAppContext } from '@/contexts/AppContext'
 
@@ -39,19 +39,14 @@ export default function FreighterLogin() {
 
   const checkStatus = async () => {
     try {
-      const newStatus = await freighterWallet.getStatus()
-      setStatus(newStatus)
-      
-      // If we have a public key and it's different from current, auto-connect
-      if (newStatus.publicKey && newStatus.allowed) {
-        // Auto-update if status changed
-        const currentKeys = localStorage.getItem('connectedWalletType')
-        if (currentKeys !== 'freighter') {
-          updateWalletKeys(newStatus.publicKey, '')
-          localStorage.setItem('connectedWalletType', 'freighter')
-          localStorage.setItem('connectedWalletName', 'Freighter Wallet')
-        }
-      }
+      const available = await isWalletInstalled()
+      setStatus({
+        available,
+        connected: available,
+        allowed: available,
+        publicKey: undefined,
+        network: undefined
+      })
     } catch (error) {
       console.error('Status check failed:', error)
     }
@@ -72,10 +67,10 @@ export default function FreighterLogin() {
     setSuccess(null)
 
     try {
-      const result = await freighterWallet.connect()
+      const publicKey = await connectWallet()
       
-      if (result.success && result.publicKey) {
-        updateWalletKeys(result.publicKey, '')
+      if (publicKey) {
+        updateWalletKeys(publicKey, '')
         localStorage.setItem('connectedWalletType', 'freighter')
         localStorage.setItem('connectedWalletName', 'Freighter Wallet')
         
@@ -118,7 +113,6 @@ export default function FreighterLogin() {
   }
 
   const handleDisconnect = () => {
-    freighterWallet.disconnect()
     updateWalletKeys('', '')
     localStorage.removeItem('connectedWalletType')
     localStorage.removeItem('connectedWalletName')

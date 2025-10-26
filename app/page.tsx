@@ -17,7 +17,7 @@ export default function Home() {
   const { publicKey, secretKey, activeTab } = state
 
   const renderPage = () => {
-    if (!publicKey || !secretKey) {
+    if (!publicKey) {
       return (
         <div className="flex-1 flex items-center justify-center min-h-screen px-6">
           <div className="text-center space-y-8 max-w-4xl w-full animate-slide-in-up">
@@ -61,7 +61,7 @@ export default function Home() {
     }
   }
 
-  const isLoggedIn = publicKey && secretKey
+  const isLoggedIn = !!publicKey
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-black via-gray-900 to-black modern-mesh-bg">

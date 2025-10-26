@@ -2,13 +2,15 @@
 
 import { useState } from 'react'
 import { useAppContext } from '@/contexts/AppContext'
+import { connectWallet as connectFreighterWallet, isWalletInstalled } from '@/lib/freighterWallet'
+
 
 export default function WalletLoginForm() {
   const { updateWalletKeys } = useAppContext()
   const [publicKey, setPublicKey] = useState('')
   const [secretKey, setSecretKey] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [connecting, setConnecting] = useState(false)
+  const [connecting, setConnecting] = useState(false);
 
   const generateKeys = async () => {
     try {
@@ -60,15 +62,28 @@ export default function WalletLoginForm() {
 
   const quickStart = async () => {
     setConnecting(true)
-    await generateKeys()
     
-    // Auto-connect after a brief delay
-    setTimeout(() => {
-      updateWalletKeys(publicKey, secretKey)
-      localStorage.setItem('connectedWalletType', 'manual')
-      localStorage.setItem('connectedWalletName', 'Generated Keys')
+    try {
+      const response = await fetch('/api/stellar/generate-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok && data.publicKey && data.secretKey) {
+        // Immediately connect with the generated keys
+        updateWalletKeys(data.publicKey, data.secretKey)
+        localStorage.setItem('connectedWalletType', 'manual')
+        localStorage.setItem('connectedWalletName', 'Generated Keys')
+      } else {
+        throw new Error('Failed to generate keys')
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to generate keys')
+    } finally {
       setConnecting(false)
-    }, 500)
+    }
   }
 
   const tryFreighter = async () => {
@@ -76,25 +91,22 @@ export default function WalletLoginForm() {
     setError(null)
 
     try {
-      // Simple Freighter check
-      if (!(window as any).freighter) {
+      // Check if Freighter is installed
+      const installed = await isWalletInstalled()
+      if (!installed) {
         throw new Error('Freighter extension not found. Please install Freighter extension and open it once.')
       }
 
-      const freighter = (window as any).freighter
-
-      // Get permission
-      const isAllowed = await freighter.isAllowed()
-      if (!isAllowed) {
-        await freighter.setAllowed()
-      }
-
-      // Get public key
-      const freighterPublicKey = await freighter.getPublicKey()
+      // Use our improved connection function
+      const freighterPublicKey = await connectFreighterWallet()
       
-      updateWalletKeys(freighterPublicKey, '')
-      localStorage.setItem('connectedWalletType', 'freighter')
-      localStorage.setItem('connectedWalletName', 'Freighter Wallet')
+      if (freighterPublicKey) {
+        updateWalletKeys(freighterPublicKey, '')
+        localStorage.setItem('connectedWalletType', 'freighter')
+        localStorage.setItem('connectedWalletName', 'Freighter Wallet')
+      } else {
+        throw new Error('Failed to connect to Freighter wallet. Please try again.')
+      }
       
     } catch (error: any) {
       setError(error.message)

@@ -8,15 +8,104 @@ const server = new StellarSdk.Horizon.Server(
 );
 const networkPassphrase = isMainnet ? StellarSdk.Networks.PUBLIC : StellarSdk.Networks.TESTNET;
 
+
+
 export async function POST(request: NextRequest) {
   let recipient: string = '';
   
   try {
-    const { publicKey, secretKey, recipient: recipientAddress, amount } = await request.json();
+    const { publicKey, secretKey, recipient: recipientAddress, amount, signedTransaction } = await request.json();
     recipient = recipientAddress;
     
+    // Handle pre-signed transactions (from Freighter)
+    if (signedTransaction) {
+      // Validate amount and recipient for signed transactions too
+      if (!recipient || !amount) {
+        throw new Error('Recipient and amount are required');
+      }
+
+      const numAmount = parseFloat(amount);
+      if (isNaN(numAmount) || numAmount <= 0) {
+        throw new Error('Invalid amount');
+      }
+
+      // === MANDATORY SPENDING LIMIT VALIDATION FOR FREIGHTER ===
+      try {
+        // Always validate transaction with smart contract (required for spending limits)
+        const validateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3003'}/api/stellar/smart-limit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'validate_transaction',
+            publicKey,
+            secretKey: '', // Freighter doesn't provide secret key
+            contactAddress: recipient,
+            amount: numAmount,
+            memo: 'Freighter Wallet Transaction'
+          })
+        });
+        
+        const validateData = await validateResponse.json();
+        
+        if (!validateResponse.ok) {
+          throw new Error(`Spending limit validation failed: ${validateData.error}`);
+        }
+        
+        // ALWAYS block if the smart contract says no
+        if (validateData.isValid === false) {
+          const errors = validateData.errors || ['Transaction not allowed by spending limits'];
+          throw new Error(`🚫 Transaction blocked: ${errors.join(', ')}`);
+        }
+        
+        console.log('✅ Freighter transaction spending limit validation passed');
+      } catch (contractError: any) {
+        // ALL validation errors should block the transaction
+        console.error('Freighter transaction spending limit validation error:', contractError.message);
+        throw new Error(`Transaction blocked by spending limits: ${contractError.message}`);
+      }
+
+      try {
+        const transaction = StellarSdk.TransactionBuilder.fromXDR(signedTransaction, networkPassphrase);
+        const result = await server.submitTransaction(transaction);
+        
+        // === LOG TRANSACTION AFTER SUCCESSFUL FREIGHTER SEND ===
+        try {
+          // Log the completed transaction (update spending amounts)
+          await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3003'}/api/stellar/smart-limit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'log_transaction',
+              publicKey,
+              secretKey: '', // Freighter doesn't provide secret key
+              contactAddress: recipient,
+              amount: numAmount,
+              memo: 'Freighter Wallet Send'
+            })
+          });
+          
+          console.log('✅ Freighter transaction logged to smart contract');
+        } catch (logError: any) {
+          console.warn('Failed to log Freighter transaction:', logError.message);
+          // Don't fail the main transaction if logging fails
+        }
+        
+        return NextResponse.json({
+          success: true,
+          hash: result.hash,
+          amount: numAmount,
+          recipient: recipient,
+          message: `Successfully sent ${amount} XLM to ${recipient}`,
+          spendingLimits: 'Transaction validated against spending limits'
+        });
+      } catch (submitError: any) {
+        throw new Error(`Failed to submit signed transaction: ${submitError.message}`);
+      }
+    }
+    
+    // For manual connections, require secret key
     if (!secretKey) {
-      throw new Error('Secret key is required');
+      throw new Error('For manual wallet connections, secret key is required. For Freighter connections, use the signedTransaction parameter.');
     }
 
     if (!recipient || !amount) {
@@ -63,7 +152,7 @@ export async function POST(request: NextRequest) {
     // === MANDATORY SPENDING LIMIT VALIDATION ===
     try {
       // Always validate transaction with smart contract (required for spending limits)
-      const validateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/stellar/smart-limit`, {
+      const validateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3003'}/api/stellar/smart-limit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -117,7 +206,7 @@ export async function POST(request: NextRequest) {
     // === LOG TRANSACTION AFTER SUCCESSFUL SEND ===
     try {
       // Log the completed transaction (spending was already updated during validation)
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/stellar/smart-limit`, {
+      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3003'}/api/stellar/smart-limit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

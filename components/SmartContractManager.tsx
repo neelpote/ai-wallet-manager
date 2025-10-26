@@ -40,8 +40,8 @@ export default function SmartContractManager({ publicKey, secretKey }: SmartCont
   const callSmartContract = async (action: string, params: any = {}) => {
     console.log('SmartContract call:', { action, publicKey: publicKey?.slice(0, 8) + '...', hasSecretKey: !!secretKey, params });
     
-    if (!publicKey || !secretKey) {
-      alert('Please connect your wallet first (enter public and secret keys)');
+    if (!publicKey) {
+      alert('Please connect your wallet first');
       return;
     }
     
@@ -141,11 +141,11 @@ export default function SmartContractManager({ publicKey, secretKey }: SmartCont
   }
 
   useEffect(() => {
-    if (publicKey && secretKey) {
+    if (publicKey) {
       loadSpendingInfo()
       loadWalletSettings()
     }
-  }, [publicKey, secretKey])
+  }, [publicKey])
 
   const handleSetDailyLimit = async () => {
     console.log('handleSetDailyLimit called with:', dailyLimit);
@@ -272,9 +272,9 @@ export default function SmartContractManager({ publicKey, secretKey }: SmartCont
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold">Advanced Wallet Guard</h2>
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${publicKey && secretKey ? 'bg-green-500' : 'bg-red-500'}`}></div>
+          <div className={`w-2 h-2 rounded-full ${publicKey ? 'bg-green-500' : 'bg-red-500'}`}></div>
           <span className="text-sm text-gray-600">
-            {publicKey && secretKey ? 'Connected' : 'Not Connected'}
+            {publicKey ? 'Connected' : 'Not Connected'}
           </span>
         </div>
       </div>

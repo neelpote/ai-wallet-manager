@@ -68,10 +68,10 @@ export default function Analytics() {
   }
 
   useEffect(() => {
-    if (publicKey && secretKey) {
+    if (publicKey) {
       fetchAnalytics()
     }
-  }, [publicKey, secretKey])
+  }, [publicKey])
 
   const getSpendingPercentage = (spent: number, limit: number) => {
     return Math.min((spent / limit) * 100, 100)

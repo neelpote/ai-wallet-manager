@@ -37,7 +37,7 @@ interface AppState {
 
 interface AppContextType {
   state: AppState
-  updateWalletKeys: (publicKey: string, secretKey: string) => void
+  updateWalletKeys: (publicKey: string, secretKey?: string) => void
   updateBalance: (balance: string) => void
   setActiveTab: (tab: string) => void
   updateSpendingInfo: (info: Partial<SpendingInfo>) => void
@@ -168,7 +168,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [state.spendingInfo, state.publicKey])
 
-  const updateWalletKeys = (publicKey: string, secretKey: string) => {
+  const updateWalletKeys = (publicKey: string, secretKey: string = '') => {
     setState(prevState => ({
       ...prevState,
       publicKey,

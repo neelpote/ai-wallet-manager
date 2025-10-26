@@ -85,39 +85,9 @@ export async function POST(request: NextRequest) {
       throw new Error('Public key is required');
     }
 
-    // Use real contract if available, otherwise fall back to simulation
-    if (USE_REAL_CONTRACT) {
-      console.log(`🔗 Using REAL smart contract: ${process.env.SOROBAN_CONTRACT_ID}`);
-      
-      // Forward to real contract API
-      const contractResponse = await fetch(`${request.nextUrl.origin}/api/stellar/smart-contract`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          publicKey,
-          secretKey,
-          dailyLimit,
-          monthlyLimit,
-          amount,
-          contactName,
-          contactAddress,
-          isTrusted,
-          memo,
-          emergencyContact,
-          settings
-        })
-      });
-      
-      const contractData = await contractResponse.json();
-      
-      if (!contractResponse.ok) {
-        // If real contract fails, fall back to simulation
-        console.log('⚠️ Real contract failed, falling back to simulation');
-      } else {
-        return NextResponse.json(contractData);
-      }
-    }
+    // Note: Real contract integration would go here
+    // For now, we use simulation mode for all operations
+    console.log(`📋 Using simulation mode for action: ${action}`);
 
     console.log('🎭 Using simulated smart contract');
     
@@ -275,6 +245,15 @@ export async function POST(request: NextRequest) {
       case 'log_transaction':
         if (!contactAddress || !amount) throw new Error('Recipient and amount are required');
         
+        // Update spending amounts
+        const logSpendingData = getSpendingData(publicKey);
+        resetSpendingIfNeeded(logSpendingData);
+        
+        logSpendingData.dailySpent += amount;
+        logSpendingData.monthlySpent += amount;
+        setSpendingData(publicKey, logSpendingData);
+        
+        // Log transaction to history
         const txKey = getStorageKey(publicKey, 'transactions');
         const transactions = smartContractStorage.get(txKey) || [];
         
@@ -288,7 +267,7 @@ export async function POST(request: NextRequest) {
         });
         
         smartContractStorage.set(txKey, transactions);
-        responseData.message = 'Transaction logged to smart contract';
+        responseData.message = `Transaction logged: ${amount} XLM spent (Daily: ${logSpendingData.dailySpent}/${logSpendingData.dailyLimit})`;
         break;
         
       case 'get_transaction_history':
@@ -356,13 +335,10 @@ export async function POST(request: NextRequest) {
           validationErrors.push(`Amount ${amount} XLM exceeds monthly spending limit. Monthly spent: ${validateData.monthlySpent}/${validateData.monthlyLimit} XLM`);
         }
         
-        // IMPORTANT: Only update spending if validation passes
-        if (isValid) {
-          validateData.dailySpent += amount;
-          validateData.monthlySpent += amount;
-        }
+        // IMPORTANT: Don't update spending during validation - only validate
+        // Spending will be updated in log_transaction after successful send
         
-        // Save the updated spending data (with reset times and potentially updated spending)
+        // Save only the reset times, not the spending amounts
         setSpendingData(publicKey, validateData);
         
         responseData.isValid = isValid;

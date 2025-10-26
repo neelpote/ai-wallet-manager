@@ -11,7 +11,9 @@
     "deploy:multi-asset": "./deploy-multi-asset-contract.sh"
   },
   "dependencies": {
+    "@creit.tech/stellar-wallets-kit": "^1.9.5",
     "@google/generative-ai": "^0.2.1",
+    "@stellar/freighter-api": "^5.0.0",
     "@stellar/stellar-sdk": "^14.3.0",
     "@stellar/wallet-sdk": "^0.11.2",
     "autoprefixer": "^10.4.21",
