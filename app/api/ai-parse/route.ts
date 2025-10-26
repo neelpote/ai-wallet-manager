@@ -4,6 +4,47 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
+// Context storage for conversation memory
+const conversationContext = new Map();
+
+// Asset aliases and variations
+const ASSET_ALIASES = {
+  'stellar': 'XLM',
+  'lumens': 'XLM',
+  'xml': 'XLM', // Common typo
+  'dollars': 'USDC',
+  'usd': 'USDC',
+  'euros': 'EURC',
+  'eur': 'EURC',
+  'aqua': 'AQUA',
+  'aquarius': 'AQUA',
+  'yieldblox': 'YBX',
+  'yield': 'YBX'
+};
+
+// Intent confidence scoring
+function calculateConfidence(command: string, parsedResult: any): number {
+  let confidence = 0.5; // Base confidence
+  
+  // Boost confidence for clear keywords
+  const clearKeywords = ['send', 'swap', 'balance', 'freeze', 'unfreeze', 'portfolio'];
+  if (clearKeywords.some(keyword => command.toLowerCase().includes(keyword))) {
+    confidence += 0.3;
+  }
+  
+  // Boost for valid amounts
+  if (parsedResult.amount && !isNaN(parsedResult.amount)) {
+    confidence += 0.2;
+  }
+  
+  // Boost for valid addresses
+  if (parsedResult.recipient && parsedResult.recipient.startsWith('G')) {
+    confidence += 0.2;
+  }
+  
+  return Math.min(confidence, 1.0);
+}
+
 // Enhanced fallback parser for when AI is not available
 function parseCommandFallback(command: string) {
   const cmd = command.toLowerCase().trim();
@@ -287,6 +328,105 @@ function parseCommandFallback(command: string) {
       contractAction: 'get_spending_analytics'
     };
   }
+
+  // === MULTI-ASSET COMMANDS ===
+  
+  // Portfolio commands: "show my portfolio" or "portfolio" or "assets"
+  if (cmd.match(/^(show|get|display).*(portfolio|assets)/i) || 
+      cmd === 'portfolio' || 
+      cmd === 'assets' ||
+      cmd.includes('my portfolio') ||
+      cmd.includes('my assets')) {
+    return {
+      action: 'get_portfolio',
+      amount: null,
+      recipient: null,
+      limit: null
+    };
+  }
+  
+  // Calculate swap: "calculate swap 100 XLM to USDC" or "how much USDC for 100 XLM" (check BEFORE swap commands)
+  if (cmd.includes('calculate') || cmd.includes('estimate') || (cmd.includes('how much') && !cmd.includes('balance'))) {
+    const calcMatch = cmd.match(/(?:calculate|estimate|how much)\s+(?:swap\s+)?(\d+(?:\.\d+)?)\s+([a-z]+)\s+(?:to|for|into)\s+([a-z]+)/i) ||
+                     cmd.match(/how much\s+([a-z]+)\s+(?:for|from)\s+(\d+(?:\.\d+)?)\s+([a-z]+)/i);
+    if (calcMatch) {
+      if (cmd.includes('how much') && calcMatch.length === 4) {
+        // "how much USDC for 100 XLM" format
+        return {
+          action: 'calculate_swap',
+          amount: parseFloat(calcMatch[2]),
+          recipient: null,
+          limit: null,
+          fromAsset: calcMatch[3].toUpperCase(),
+          toAsset: calcMatch[1].toUpperCase()
+        };
+      } else {
+        // "calculate swap 100 XLM to USDC" format
+        return {
+          action: 'calculate_swap',
+          amount: parseFloat(calcMatch[1]),
+          recipient: null,
+          limit: null,
+          fromAsset: calcMatch[2].toUpperCase(),
+          toAsset: calcMatch[3].toUpperCase()
+        };
+      }
+    }
+  }
+
+  // Swap commands: "swap 100 XLM to USDC" or "convert 50 USDC to XLM"
+  const swapMatch = cmd.match(/(?:swap|convert|exchange)\s+(\d+(?:\.\d+)?)\s+([a-z]+)\s+(?:to|for|into)\s+([a-z]+)/i);
+  if (swapMatch) {
+    return {
+      action: 'swap_tokens',
+      amount: parseFloat(swapMatch[1]),
+      recipient: null,
+      limit: null,
+      fromAsset: swapMatch[2].toUpperCase(),
+      toAsset: swapMatch[3].toUpperCase()
+    };
+  }
+  
+  // Asset price commands: "price of USDC" or "what's the price of XLM"
+  const priceMatch = cmd.match(/(?:price|cost|value)\s+(?:of\s+)?([a-z]+)/i) ||
+                    cmd.match(/what.*(?:price|cost|value).*([a-z]+)/i);
+  if (priceMatch || cmd.includes('prices') || cmd.includes('price')) {
+    return {
+      action: 'get_asset_prices',
+      amount: null,
+      recipient: null,
+      limit: null,
+      assetCode: priceMatch ? priceMatch[1].toUpperCase() : null
+    };
+  }
+  
+  // Swap history: "swap history" or "show my swaps"
+  if (cmd.match(/^(show|get|display).*(swap|exchange).*history/i) || 
+      cmd.includes('swap history') ||
+      cmd.includes('my swaps') ||
+      cmd === 'swaps') {
+    return {
+      action: 'get_swap_history',
+      amount: null,
+      recipient: null,
+      limit: null
+    };
+  }
+
+  // Check trustlines: "check trustlines" or "show trustlines" or "my trustlines"
+  if (cmd.match(/^(check|show|get|display).*(trustline|trust)/i) || 
+      cmd.includes('trustlines') ||
+      cmd.includes('my trustlines') ||
+      cmd === 'trustlines') {
+    return {
+      action: 'check_trustlines',
+      amount: null,
+      recipient: null,
+      limit: null
+    };
+  }
+  
+
   
   // If nothing matches, provide helpful error with suggestions
   console.log('Unrecognized command:', cmd);
@@ -346,12 +486,15 @@ Command: "${command}"
 
 Return format (must be valid JSON):
 {
-  "action": "send" | "balance" | "history" | "set_limit" | "check_limit" | "save_contact" | "save_contact_to_contract" | "list_contacts" | "list_contract_contacts" | "send_to_contact" | "set_daily_limit" | "set_monthly_limit" | "freeze_wallet" | "unfreeze_wallet" | "get_spending_info" | "reset_spending_limits" | "get_spending_analytics" | "set_contact_trusted",
+  "action": "send" | "balance" | "history" | "set_limit" | "check_limit" | "save_contact" | "save_contact_to_contract" | "list_contacts" | "list_contract_contacts" | "send_to_contact" | "set_daily_limit" | "set_monthly_limit" | "freeze_wallet" | "unfreeze_wallet" | "get_spending_info" | "reset_spending_limits" | "get_spending_analytics" | "set_contact_trusted" | "get_portfolio" | "swap_tokens" | "get_asset_prices" | "get_swap_history" | "calculate_swap",
   "amount": number or null,
   "recipient": "full stellar address starting with G" or null,
   "limit": number or null,
   "contactName": "contact name" or null,
-  "contractAction": "smart contract function name" or null
+  "contractAction": "smart contract function name" or null,
+  "fromAsset": "asset code like XLM, USDC" or null,
+  "toAsset": "asset code like XLM, USDC" or null,
+  "assetCode": "single asset code" or null
 }
 
 Rules:

@@ -17,7 +17,7 @@ export default function ChatInterface() {
   
   const getDefaultWelcomeMessage = (): Message => ({
     id: '1',
-    text: 'Hi! I can help you manage your Stellar wallet with AI + Smart Contract power! Try:\n\n💰 Basic Commands:\n• "What\'s my balance?"\n• "Send 10 XLM to GXXX..."\n• "List contacts"\n\n🔒 Smart Contract Security:\n• "Freeze" or "Freeze my wallet"\n• "Unfreeze" or "Unfreeze my wallet"\n• "Daily limit 500" or "Set daily limit to 500 XLM"\n• "Status" or "Check spending limits"\n\n👥 Save Contacts:\n• "Save GXXX as Alice" (local)\n• "Save contract Alice GXXX" (blockchain)',
+    text: 'Hi! I can help you manage your Stellar wallet with AI + Smart Contract power! Try:\n\n💰 Basic Commands:\n• "What\'s my balance?"\n• "Send 10 XLM to GXXX..."\n• "List contacts"\n\n🔄 Multi-Asset & Swapping:\n• "Show my portfolio"\n• "Swap 100 XLM to USDC"\n• "Convert 50 USDC to XLM"\n• "What\'s the price of USDC?"\n• "Check trustlines"\n• "Swap history"\n\n🔒 Smart Contract Security:\n• "Freeze" or "Freeze my wallet"\n• "Unfreeze" or "Unfreeze my wallet"\n• "Daily limit 500" or "Set daily limit to 500 XLM"\n• "Status" or "Check spending limits"\n\n👥 Save Contacts:\n• "Save GXXX as Alice" (local)\n• "Save contract Alice GXXX" (blockchain)',
     isUser: false,
     timestamp: new Date()
   })
@@ -445,6 +445,198 @@ export default function ChatInterface() {
           }
           
           return `📈 Spending Analytics:\n• Daily spent: 0 XLM\n• Monthly spent: 0 XLM\n• Total transactions: 0\n• Smart contract: Active`
+
+        // === MULTI-ASSET COMMANDS ===
+        case 'get_portfolio':
+          response = await fetch('/api/stellar/multi-asset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'get_portfolio',
+              publicKey,
+              secretKey
+            })
+          })
+          
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('Portfolio API error:', response.status, errorText)
+            throw new Error(`Failed to get portfolio (${response.status}): ${errorText.includes('<!DOCTYPE') ? 'API endpoint not found' : errorText}`)
+          }
+          
+          const portfolioData = await response.json()
+          
+          const portfolio = portfolioData.portfolio
+          let portfolioText = `💼 Your Multi-Asset Portfolio:\n\n`
+          
+          Object.values(portfolio.assets).forEach((asset: any) => {
+            const icon = asset.code === 'XLM' ? '⭐' : asset.code === 'USDC' ? '💵' : asset.code === 'EURC' ? '💶' : '🪙'
+            portfolioText += `${icon} ${asset.code}: ${asset.balance.toFixed(4)} (≈${asset.valueXLM.toFixed(2)} XLM)\n`
+          })
+          
+          portfolioText += `\n💰 Total Value: ${portfolio.totalValueXLM.toFixed(4)} XLM`
+          portfolioText += `\n💵 ≈ $${(portfolio.totalValueXLM * 0.12).toFixed(2)} USD`
+          
+          return portfolioText
+
+        case 'swap_tokens':
+          if (!parsedCommand.fromAsset || !parsedCommand.toAsset || !parsedCommand.amount) {
+            throw new Error('From asset, to asset, and amount are required for swapping')
+          }
+          
+          response = await fetch('/api/stellar/multi-asset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'execute_swap',
+              publicKey,
+              secretKey,
+              fromAsset: parsedCommand.fromAsset,
+              toAsset: parsedCommand.toAsset,
+              amount: parsedCommand.amount
+            })
+          })
+          
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('Swap API error:', response.status, errorText)
+            throw new Error(`Swap failed (${response.status}): ${errorText.includes('<!DOCTYPE') ? 'API endpoint not found' : errorText}`)
+          }
+          
+          const swapData = await response.json()
+          
+          return `✅ Swap Successful!\n🔄 ${parsedCommand.amount} ${parsedCommand.fromAsset} → ${swapData.amountReceived.toFixed(4)} ${parsedCommand.toAsset}\n💰 Rate: 1 ${parsedCommand.fromAsset} = ${(swapData.amountReceived / parsedCommand.amount).toFixed(4)} ${parsedCommand.toAsset}\n📋 Transaction: ${swapData.transactionId.slice(0, 8)}...`
+
+        case 'get_asset_prices':
+          response = await fetch('/api/stellar/multi-asset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'get_asset_prices',
+              publicKey,
+              secretKey
+            })
+          })
+          
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('Prices API error:', response.status, errorText)
+            throw new Error(`Failed to get prices (${response.status}): ${errorText.includes('<!DOCTYPE') ? 'API endpoint not found' : errorText}`)
+          }
+          
+          const pricesData = await response.json()
+          
+          let pricesText = `💹 Current Asset Prices:\n\n`
+          pricesData.prices.forEach((price: any) => {
+            const icon = price.code === 'XLM' ? '⭐' : price.code === 'USDC' ? '💵' : price.code === 'EURC' ? '💶' : '🪙'
+            const changeIcon = price.change24h > 0 ? '📈' : price.change24h < 0 ? '📉' : '➡️'
+            pricesText += `${icon} ${price.code}: ${price.priceXLM.toFixed(4)} XLM ($${price.priceUSD.toFixed(4)}) ${changeIcon} ${price.change24h.toFixed(2)}%\n`
+          })
+          
+          return pricesText
+
+        case 'get_swap_history':
+          response = await fetch('/api/stellar/multi-asset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'get_swap_history',
+              publicKey,
+              secretKey
+            })
+          })
+          
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('History API error:', response.status, errorText)
+            throw new Error(`Failed to get swap history (${response.status}): ${errorText.includes('<!DOCTYPE') ? 'API endpoint not found' : errorText}`)
+          }
+          
+          const historyData = await response.json()
+          
+          if (historyData.swapHistory.length === 0) {
+            return `📊 No swap history found.\n💡 Start swapping with: "Swap 10 XLM to USDC"`
+          }
+          
+          let historyText = `📊 Recent Swap History:\n\n`
+          historyData.swapHistory.slice(0, 5).forEach((swap: any) => {
+            const fromIcon = swap.fromAsset === 'XLM' ? '⭐' : swap.fromAsset === 'USDC' ? '💵' : '🪙'
+            const toIcon = swap.toAsset === 'XLM' ? '⭐' : swap.toAsset === 'USDC' ? '💵' : '🪙'
+            const statusIcon = swap.status === 'completed' ? '✅' : '❌'
+            historyText += `${statusIcon} ${fromIcon}${swap.amountIn.toFixed(2)} ${swap.fromAsset} → ${toIcon}${swap.amountOut?.toFixed(2) || '?'} ${swap.toAsset}\n`
+            historyText += `   ${new Date(swap.timestamp).toLocaleDateString()}\n\n`
+          })
+          
+          return historyText
+
+        case 'calculate_swap':
+          if (!parsedCommand.fromAsset || !parsedCommand.toAsset || !parsedCommand.amount) {
+            throw new Error('From asset, to asset, and amount are required for calculation')
+          }
+          
+          response = await fetch('/api/stellar/multi-asset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'calculate_swap',
+              publicKey,
+              secretKey,
+              fromAsset: parsedCommand.fromAsset,
+              toAsset: parsedCommand.toAsset,
+              amount: parsedCommand.amount
+            })
+          })
+          
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('Calculation API error:', response.status, errorText)
+            throw new Error(`Failed to calculate swap (${response.status}): ${errorText.includes('<!DOCTYPE') ? 'API endpoint not found' : errorText}`)
+          }
+          
+          const calcData = await response.json()
+          
+          const calc = calcData.calculation
+          return `🧮 Swap Calculation:\n\n💱 ${calc.amountIn} ${calc.fromAsset} → ${calc.amountOut.toFixed(4)} ${calc.toAsset}\n📊 Rate: 1 ${calc.fromAsset} = ${calc.rate.toFixed(4)} ${calc.toAsset}\n💸 Fee: ${calc.fee.toFixed(4)} ${calc.fromAsset} (0.3%)\n📉 Price Impact: ${calc.priceImpact.toFixed(2)}%\n🛡️ Minimum Received: ${calc.minimumReceived.toFixed(4)} ${calc.toAsset}\n\n💡 Execute with: "Swap ${calc.amountIn} ${calc.fromAsset} to ${calc.toAsset}"`
+
+        case 'check_trustlines':
+          response = await fetch('/api/stellar/multi-asset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'check_trustlines',
+              publicKey,
+              secretKey
+            })
+          })
+          
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('Trustlines API error:', response.status, errorText)
+            throw new Error(`Failed to check trustlines (${response.status}): ${errorText.includes('<!DOCTYPE') ? 'API endpoint not found' : errorText}`)
+          }
+          
+          const trustlinesData = await response.json()
+          const trustlines = trustlinesData.trustlines
+          
+          let trustlinesText = `🔗 Your Asset Trustlines:\n\n`
+          
+          if (trustlines.established.length > 0) {
+            trustlinesText += `✅ Established Trustlines:\n`
+            trustlines.established.forEach((asset: any) => {
+              trustlinesText += `${asset.icon} ${asset.code}: ${parseFloat(asset.balance).toFixed(4)} ${asset.name}\n`
+            })
+            trustlinesText += `\n`
+          }
+          
+          if (trustlines.missing.length > 0) {
+            trustlinesText += `❌ Missing Trustlines:\n`
+            trustlines.missing.forEach((asset: any) => {
+              trustlinesText += `${asset.icon} ${asset.code}: ${asset.name} - ${asset.description}\n`
+            })
+            trustlinesText += `\n💡 To add trustlines:\n• Use Stellar Laboratory (laboratory.stellar.org)\n• Or use Freighter wallet\n• Switch to testnet mode for testing\n`
+          }
+          
+          return trustlinesText
           
         default:
           throw new Error('Unknown command')
@@ -632,12 +824,14 @@ export default function ChatInterface() {
         {/* Quick Commands */}
         <div className="mt-4 flex flex-wrap gap-2 justify-between">
           <div className="flex flex-wrap gap-2">
-            {['Balance', 'Send XLM', 'Set Limit', 'Status'].map((cmd, index) => (
+            {['Balance', 'Portfolio', 'Trustlines', 'Swap', 'Prices', 'Status'].map((cmd, index) => (
               <button
                 key={cmd}
                 onClick={() => setInput(cmd === 'Balance' ? "What's my balance?" : 
-                                       cmd === 'Send XLM' ? "Send 10 XLM to " :
-                                       cmd === 'Set Limit' ? "Set daily limit to 500 XLM" :
+                                       cmd === 'Portfolio' ? "Show my portfolio" :
+                                       cmd === 'Trustlines' ? "Check trustlines" :
+                                       cmd === 'Swap' ? "Swap 100 XLM to USDC" :
+                                       cmd === 'Prices' ? "What's the price of USDC?" :
                                        "Status")}
                 className="px-3 py-1 text-xs rounded-full bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40 transition-all duration-300 hover:scale-105"
                 style={{animationDelay: `${index * 0.1}s`}}

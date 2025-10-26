@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import ChatInterface from '../ChatInterface'
+import MultiAssetPortfolio from '../MultiAssetPortfolio'
 import { useAppContext } from '@/contexts/AppContext'
 import ContractStatus from '@/components/ContractStatus'
 
@@ -62,7 +63,18 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* AI Chat Interface - Full Width & Prominent - NOW FIRST */}
+      {/* Multi-Asset Portfolio - NEW FIRST */}
+      <div className="mb-8">
+        <div className="relative">
+          {/* Background glow effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue/10 via-purple/15 to-blue/10 rounded-3xl blur-2xl"></div>
+          <div className="relative">
+            <MultiAssetPortfolio />
+          </div>
+        </div>
+      </div>
+
+      {/* AI Chat Interface - Full Width & Prominent - NOW SECOND */}
       <div className="mb-8">
         <div className="relative">
           {/* Background glow effect */}
@@ -183,11 +195,14 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   const commands = [
-                    '"What\'s my balance?"',
-                    '"Send 10 XLM to GXXX..."',
-                    '"Set daily limit to 500 XLM"',
-                    '"Freeze my wallet"',
-                    '"Status"'
+                    '💰 Basic: "What\'s my balance?"',
+                    '📤 Send: "Send 10 XLM to GXXX..."',
+                    '🔄 Swap: "Swap 100 XLM to USDC"',
+                    '💼 Portfolio: "Show my portfolio"',
+                    '💹 Prices: "What\'s the price of USDC?"',
+                    '🔒 Security: "Set daily limit to 500 XLM"',
+                    '🚨 Emergency: "Freeze my wallet"',
+                    '📊 Status: "Status"'
                   ];
                   alert(`Try these AI commands:\n\n${commands.join('\n')}`);
                 }}
@@ -196,7 +211,7 @@ export default function Dashboard() {
                 <span className="text-xl mr-3">🤖</span>
                 <div className="text-left">
                   <div className="font-semibold">View AI Commands</div>
-                  <div className="text-xs text-gray-400">See available voice commands</div>
+                  <div className="text-xs text-gray-400">Multi-asset & swap commands</div>
                 </div>
               </button>
             </div>

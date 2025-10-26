@@ -1,31 +1,49 @@
 # AI Wallet Manager
 
-A Next.js application that provides an AI-powered interface for managing Stellar (XLM) cryptocurrency wallets using natural language commands.
+A Next.js application that provides an AI-powered interface for managing Stellar cryptocurrency wallets with multi-asset support and token swapping using natural language commands.
 
 ## Features
 
 - 🤖 **AI-Powered Commands**: Use natural language to interact with your Stellar wallet
-- 💰 **Balance Checking**: View your XLM balance in real-time
-- 📤 **Send Transactions**: Send XLM to other Stellar addresses
-- 📊 **Transaction History**: View recent transaction history
-- 🎯 **Spending Limits**: Set and check spending limits
+- 💼 **Multi-Asset Portfolio**: Manage XLM, USDC, EURC, AQUA, and YBX assets
+- 🔄 **Token Swapping**: Swap between different Stellar assets directly in chat
+- 💰 **Balance Checking**: View your multi-asset portfolio in real-time
+- 📤 **Send Transactions**: Send any supported asset to other Stellar addresses
+- 📊 **Transaction History**: View recent transactions and swap history
+- 🎯 **Smart Contract Security**: Advanced spending limits and wallet freeze protection
+- 🔗 **Trustline Management**: Check and manage asset trustlines
 - 🔐 **Secure**: Uses your own Stellar keys (testnet supported)
 
 ## Supported Commands
 
-- `"What's my balance?"` - Check your current XLM balance
-- `"Send 10 XLM to GXXX..."` - Send XLM to a Stellar address
+### Basic Wallet Commands
+- `"What's my balance?"` - Check your current balance
+- `"Send 10 XLM to GXXX..."` - Send assets to a Stellar address
 - `"Show my transaction history"` - View recent transactions
-- `"Set spending limit to 100 XLM"` - Set a spending limit
-- `"Check my current limit"` - View current spending limit
+- `"List contacts"` - View saved contacts
+
+### Multi-Asset & Swapping
+- `"Show my portfolio"` - View all your assets and their values
+- `"Swap 100 XLM to USDC"` - Swap between different assets
+- `"What's the price of USDC?"` - Check current asset prices
+- `"Check trustlines"` - View your asset trustlines
+- `"Calculate swap 50 XLM to EURC"` - Estimate swap outputs
+- `"Swap history"` - View your trading history
+
+### Smart Contract Security
+- `"Set daily limit to 500 XLM"` - Set spending limits
+- `"Freeze my wallet"` - Emergency wallet freeze
+- `"Status"` - Check wallet and security status
+- `"Save contract Alice GXXX"` - Save contacts to blockchain
 
 ## Tech Stack
 
 - **Frontend**: Next.js 14, React 18, TypeScript
 - **Styling**: Tailwind CSS
-- **Blockchain**: Stellar SDK
+- **Blockchain**: Stellar SDK, Soroban Smart Contracts
 - **AI**: Google Gemini AI (with fallback parser)
 - **Network**: Stellar Testnet
+- **Assets**: XLM, USDC, EURC, AQUA, YBX
 
 ## Prerequisites
 

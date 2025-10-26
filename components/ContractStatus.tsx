@@ -34,7 +34,7 @@ export default function ContractStatus() {
 
       // Test contract connection by checking if we can get spending info
       try {
-        const response = await fetch('/api/stellar/smart-contract', {
+        const response = await fetch('/api/stellar/smart-limit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
