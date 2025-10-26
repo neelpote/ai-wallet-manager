@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAppContext } from '@/contexts/AppContext'
 
 interface SmartContractManagerProps {
   publicKey: string
@@ -23,6 +24,7 @@ interface WalletSettings {
 }
 
 export default function SmartContractManager({ publicKey, secretKey }: SmartContractManagerProps) {
+  const { addContact } = useAppContext()
   const [spendingInfo, setSpendingInfo] = useState<SpendingInfo | null>(null)
   const [walletSettings, setWalletSettings] = useState<WalletSettings | null>(null)
   const [loading, setLoading] = useState(false)
@@ -214,27 +216,30 @@ export default function SmartContractManager({ publicKey, secretKey }: SmartCont
   }
 
   const handleAddContact = async () => {
-    console.log('handleAddContact called with:', { contactName, contactAddress });
-    
     if (!contactName || !contactAddress) {
-      console.log('Missing contact name or address');
       alert('Please enter both contact name and address');
       return;
     }
     
     try {
-      console.log('Calling smart contract add_contact');
+      // Save to smart contract
       const result = await callSmartContract('add_contact', {
         contactName,
         contactAddress,
         isTrusted: false
       })
-      console.log('Add contact result:', result)
-      alert(`🔗 Contact "${contactName}" added to smart contract successfully!`)
+      
+      // Also save to local context for persistence across pages
+      addContact({
+        name: contactName.trim(),
+        address: contactAddress.trim(),
+        isTrusted: false
+      })
+      
+      alert(`🔗 Contact "${contactName}" added to smart contract and saved locally!`)
       setContactName('')
       setContactAddress('')
     } catch (error: any) {
-      console.error('Add contact error:', error)
       alert(`Failed to add contact: ${error.message}`)
     }
   }

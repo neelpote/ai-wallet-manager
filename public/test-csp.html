@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSP Test</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline';">
+</head>
+<body>
+    <h1>CSP Test Page</h1>
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        
+        // Test eval()
+        try {
+            eval('console.log("eval works!")');
+            results.innerHTML += '<p>✅ eval() works</p>';
+        } catch (e) {
+            results.innerHTML += '<p>❌ eval() blocked: ' + e.message + '</p>';
+        }
+        
+        // Test Function constructor
+        try {
+            new Function('return 1 + 1')();
+            results.innerHTML += '<p>✅ Function constructor works</p>';
+        } catch (e) {
+            results.innerHTML += '<p>❌ Function constructor blocked: ' + e.message + '</p>';
+        }
+        
+        // Test inline script
+        results.innerHTML += '<p>✅ Inline script works</p>';
+        
+        // Check for Freighter
+        if (window.freighter) {
+            results.innerHTML += '<p>✅ Freighter detected</p>';
+        } else {
+            results.innerHTML += '<p>⏳ Freighter not detected (may need to be opened)</p>';
+        }
+    </script>
+</body>
+</html>

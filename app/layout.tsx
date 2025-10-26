@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import '../styles/kiro-theme.css'
+import { AppProvider } from '../contexts/AppContext'
+
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -17,7 +19,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" data-theme="kiro-dark">
-      <body className={`${inter.className} kiro-scrollbar`}>{children}</body>
+      <head>
+        <script src="/csp-override.js" />
+      </head>
+      <body className={`${inter.className} kiro-scrollbar`}>
+        <AppProvider>
+          {children}
+        </AppProvider>
+      </body>
     </html>
   )
 }

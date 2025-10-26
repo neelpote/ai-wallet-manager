@@ -3,12 +3,11 @@
 import { useState, useEffect } from 'react'
 import TransactionHistory from '../TransactionHistory'
 
-interface AnalyticsProps {
-  publicKey: string
-  secretKey: string
-}
+import { useAppContext } from '@/contexts/AppContext'
 
-export default function Analytics({ publicKey, secretKey }: AnalyticsProps) {
+export default function Analytics() {
+  const { state } = useAppContext()
+  const { publicKey, secretKey } = state
   const [loading, setLoading] = useState(false)
   const [analytics, setAnalytics] = useState<any>(null)
   const [spendingInfo, setSpendingInfo] = useState<any>(null)

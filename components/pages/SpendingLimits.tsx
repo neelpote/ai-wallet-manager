@@ -1,22 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAppContext } from '@/contexts/AppContext'
 
-interface SpendingLimitsProps {
-  publicKey: string
-  secretKey: string
-}
-
-interface SpendingInfo {
-  dailyLimit: number
-  dailySpent: number
-  monthlyLimit: number
-  monthlySpent: number
-  isFrozen?: boolean
-}
-
-export default function SpendingLimits({ publicKey, secretKey }: SpendingLimitsProps) {
-  const [spendingInfo, setSpendingInfo] = useState<SpendingInfo | null>(null)
+export default function SpendingLimits() {
+  const { state, updateSpendingInfo } = useAppContext()
+  const { publicKey, secretKey, spendingInfo } = state
   const [loading, setLoading] = useState(false)
   const [dailyLimit, setDailyLimit] = useState('')
   const [monthlyLimit, setMonthlyLimit] = useState('')
@@ -55,7 +44,7 @@ export default function SpendingLimits({ publicKey, secretKey }: SpendingLimitsP
       const result = await callSmartContract('get_spending_info')
       
       if (result.spendingInfo) {
-        setSpendingInfo({
+        updateSpendingInfo({
           dailyLimit: result.spendingInfo.dailyLimit || 1000,
           dailySpent: result.spendingInfo.dailySpent || 0,
           monthlyLimit: result.spendingInfo.monthlyLimit || 10000,

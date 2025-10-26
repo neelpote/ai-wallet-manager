@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Simulated smart contract storage (in production, this would be on Stellar blockchain)
+// Check if we should use real contract or simulation
+const USE_REAL_CONTRACT = process.env.SOROBAN_CONTRACT_ID && process.env.SOROBAN_CONTRACT_ID !== '';
+
+// Simulated smart contract storage (fallback when real contract is not available)
 const smartContractStorage = new Map();
 
 function getStorageKey(publicKey: string, dataType: string) {
@@ -82,11 +85,47 @@ export async function POST(request: NextRequest) {
       throw new Error('Public key is required');
     }
 
-    // Simulate smart contract operations
+    // Use real contract if available, otherwise fall back to simulation
+    if (USE_REAL_CONTRACT) {
+      console.log(`🔗 Using REAL smart contract: ${process.env.SOROBAN_CONTRACT_ID}`);
+      
+      // Forward to real contract API
+      const contractResponse = await fetch(`${request.nextUrl.origin}/api/stellar/smart-contract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          publicKey,
+          secretKey,
+          dailyLimit,
+          monthlyLimit,
+          amount,
+          contactName,
+          contactAddress,
+          isTrusted,
+          memo,
+          emergencyContact,
+          settings
+        })
+      });
+      
+      const contractData = await contractResponse.json();
+      
+      if (!contractResponse.ok) {
+        // If real contract fails, fall back to simulation
+        console.log('⚠️ Real contract failed, falling back to simulation');
+      } else {
+        return NextResponse.json(contractData);
+      }
+    }
+
+    console.log('🎭 Using simulated smart contract');
+    
+    // Simulate smart contract operations (existing code)
     let responseData: any = {
       success: true,
       action: action,
-      smartContract: 'simulated'
+      smartContract: USE_REAL_CONTRACT ? 'real-contract-fallback' : 'simulated'
     };
     
     switch (action) {

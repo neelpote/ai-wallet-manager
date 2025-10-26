@@ -1,11 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
-interface ChatInterfaceProps {
-  publicKey: string
-  secretKey: string
-}
+import { useAppContext } from '@/contexts/AppContext'
 
 interface Message {
   id: string
@@ -14,17 +11,52 @@ interface Message {
   timestamp: Date
 }
 
-export default function ChatInterface({ publicKey, secretKey }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: 'Hi! I can help you manage your Stellar wallet with AI + Smart Contract power! Try:\n\n💰 Basic Commands:\n• "What\'s my balance?"\n• "Send 10 XLM to GXXX..."\n• "List contacts"\n\n🔒 Smart Contract Security:\n• "Freeze" or "Freeze my wallet"\n• "Unfreeze" or "Unfreeze my wallet"\n• "Daily limit 500" or "Set daily limit to 500 XLM"\n• "Status" or "Check spending limits"\n\n👥 Save Contacts:\n• "Save GXXX as Alice" (local)\n• "Save contract Alice GXXX" (blockchain)',
-      isUser: false,
-      timestamp: new Date()
-    }
-  ])
+export default function ChatInterface() {
+  const { state, addContact, updateBalance } = useAppContext()
+  const { publicKey, secretKey, contacts } = state
+  
+  const getDefaultWelcomeMessage = (): Message => ({
+    id: '1',
+    text: 'Hi! I can help you manage your Stellar wallet with AI + Smart Contract power! Try:\n\n💰 Basic Commands:\n• "What\'s my balance?"\n• "Send 10 XLM to GXXX..."\n• "List contacts"\n\n🔒 Smart Contract Security:\n• "Freeze" or "Freeze my wallet"\n• "Unfreeze" or "Unfreeze my wallet"\n• "Daily limit 500" or "Set daily limit to 500 XLM"\n• "Status" or "Check spending limits"\n\n👥 Save Contacts:\n• "Save GXXX as Alice" (local)\n• "Save contract Alice GXXX" (blockchain)',
+    isUser: false,
+    timestamp: new Date()
+  })
+  
+  const [messages, setMessages] = useState<Message[]>([getDefaultWelcomeMessage()])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Load chat history when wallet connects
+  useEffect(() => {
+    if (publicKey) {
+      const savedHistory = localStorage.getItem(`chat_history_${publicKey}`)
+      if (savedHistory) {
+        try {
+          const parsedHistory = JSON.parse(savedHistory)
+          // Convert timestamp strings back to Date objects
+          const historyWithDates = parsedHistory.map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+          setMessages(historyWithDates)
+        } catch (error) {
+          console.error('Failed to parse chat history:', error)
+          // If parsing fails, start with welcome message
+          setMessages([getDefaultWelcomeMessage()])
+        }
+      } else {
+        // No saved history, start with welcome message
+        setMessages([getDefaultWelcomeMessage()])
+      }
+    }
+  }, [publicKey])
+
+  // Save chat history when messages change
+  useEffect(() => {
+    if (publicKey && messages.length > 0) {
+      localStorage.setItem(`chat_history_${publicKey}`, JSON.stringify(messages))
+    }
+  }, [messages, publicKey])
 
   const addMessage = (text: string, isUser: boolean) => {
     const newMessage: Message = {
@@ -38,18 +70,15 @@ export default function ChatInterface({ publicKey, secretKey }: ChatInterfacePro
 
   // Contact management functions
   const saveContact = (name: string, address: string) => {
-    const contacts = JSON.parse(localStorage.getItem(`contacts_${publicKey}`) || '{}')
-    contacts[name.toLowerCase()] = address
-    localStorage.setItem(`contacts_${publicKey}`, JSON.stringify(contacts))
+    addContact({ name: name.toLowerCase(), address })
   }
 
   const getContact = async (name: string): Promise<string | null> => {
     // First check local contacts
-    const contacts = JSON.parse(localStorage.getItem(`contacts_${publicKey}`) || '{}')
-    const localContact = contacts[name.toLowerCase()];
+    const localContact = contacts.find(c => c.name === name.toLowerCase())
     
     if (localContact) {
-      return localContact;
+      return localContact.address;
     }
     
     // If not found locally, check smart contract
@@ -78,25 +107,29 @@ export default function ChatInterface({ publicKey, secretKey }: ChatInterfacePro
   }
 
   const listContacts = async (): Promise<string> => {
-    const contacts = JSON.parse(localStorage.getItem(`contacts_${publicKey}`) || '{}')
-    const localContactList = Object.entries(contacts)
-    
     let result = '';
     
-    if (localContactList.length > 0) {
-      result += `📱 Local Contacts:\n${localContactList.map(([name, address]) => 
-        `• ${name}: ${(address as string).slice(0, 8)}...${(address as string).slice(-8)}`
+    if (contacts.length > 0) {
+      result += `📱 Local Contacts:\n${contacts.map(contact => 
+        `• ${contact.name}: ${contact.address.slice(0, 8)}...${contact.address.slice(-8)}`
       ).join('\n')}\n\n`;
     }
     
     // Try to get smart contract contacts (this is a simplified approach)
     result += `🔗 Smart Contract Contacts:\n💡 Use "Send 10 XLM to contactname" to send to any saved contact\n💡 Contacts saved via Smart Contract Manager are also available`;
     
-    if (localContactList.length === 0) {
+    if (contacts.length === 0) {
       result = 'No local contacts saved yet.\n\n💡 Save contacts:\n• Local: "Save GXXX as John"\n• Smart Contract: Use the Smart Contract Manager interface\n\n🔗 Smart contract contacts are automatically available for sending!';
     }
     
     return result;
+  }
+
+  const clearChatHistory = () => {
+    if (publicKey) {
+      localStorage.removeItem(`chat_history_${publicKey}`)
+      setMessages([getDefaultWelcomeMessage()])
+    }
   }
 
   const executeCommand = async (parsedCommand: any) => {
@@ -140,13 +173,12 @@ export default function ChatInterface({ publicKey, secretKey }: ChatInterfacePro
           if (!parsedCommand.limit) {
             throw new Error('Limit amount is required')
           }
-          // Store limit in localStorage for now
-          localStorage.setItem('spending_limit', parsedCommand.limit.toString())
-          return `Spending limit set to ${parsedCommand.limit} XLM`
+          // Update daily limit in context (will be persisted automatically)
+          updateSpendingInfo({ dailyLimit: parsedCommand.limit })
+          return `Daily spending limit set to ${parsedCommand.limit} XLM`
           
         case 'check_limit':
-          const limit = localStorage.getItem('spending_limit')
-          return limit ? `Current spending limit: ${limit} XLM` : 'No spending limit set'
+          return `Current spending limits:\n• Daily: ${spendingInfo.dailySpent}/${spendingInfo.dailyLimit} XLM\n• Monthly: ${spendingInfo.monthlySpent}/${spendingInfo.monthlyLimit} XLM`
           
         case 'save_contact':
           if (!parsedCommand.contactName || !parsedCommand.recipient) {
@@ -497,7 +529,12 @@ export default function ChatInterface({ publicKey, secretKey }: ChatInterfacePro
             <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-white/60 rounded-full animate-pulse"></div>
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">AI Assistant</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold text-white">AI Assistant</h2>
+              <span className="px-2 py-1 text-xs rounded-full bg-white/20 text-gray-300">
+                {messages.length} messages
+              </span>
+            </div>
             <p className="text-sm text-gray-400">Natural language wallet commands</p>
           </div>
         </div>
@@ -568,10 +605,17 @@ export default function ChatInterface({ publicKey, secretKey }: ChatInterfacePro
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Try: 'Send 10 XLM to Alice' or 'What's my balance?'"
-              className="w-full kiro-input pl-12 pr-4 py-4 text-base rounded-2xl"
+              className="w-full pl-12 pr-4 py-4 text-base rounded-2xl bg-white/10 border border-white/20 text-white placeholder:text-white/50 focus:outline-none focus:border-white/40 focus:bg-white/15 transition-all duration-300 backdrop-blur-sm relative z-10"
               disabled={loading}
+              style={{ 
+                minHeight: '56px',
+                fontSize: '16px',
+                lineHeight: '1.5',
+                WebkitAppearance: 'none',
+                appearance: 'none'
+              }}
             />
-            <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-lg">
+            <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 text-lg pointer-events-none">
               💬
             </div>
           </div>
@@ -586,20 +630,31 @@ export default function ChatInterface({ publicKey, secretKey }: ChatInterfacePro
         </form>
         
         {/* Quick Commands */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {['Balance', 'Send XLM', 'Set Limit', 'Status'].map((cmd, index) => (
-            <button
-              key={cmd}
-              onClick={() => setInput(cmd === 'Balance' ? "What's my balance?" : 
-                                   cmd === 'Send XLM' ? "Send 10 XLM to " :
-                                   cmd === 'Set Limit' ? "Set daily limit to 500 XLM" :
-                                   "Status")}
-              className="px-3 py-1 text-xs rounded-full bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40 transition-all duration-300 hover:scale-105"
-              style={{animationDelay: `${index * 0.1}s`}}
-            >
-              {cmd}
-            </button>
-          ))}
+        <div className="mt-4 flex flex-wrap gap-2 justify-between">
+          <div className="flex flex-wrap gap-2">
+            {['Balance', 'Send XLM', 'Set Limit', 'Status'].map((cmd, index) => (
+              <button
+                key={cmd}
+                onClick={() => setInput(cmd === 'Balance' ? "What's my balance?" : 
+                                       cmd === 'Send XLM' ? "Send 10 XLM to " :
+                                       cmd === 'Set Limit' ? "Set daily limit to 500 XLM" :
+                                       "Status")}
+                className="px-3 py-1 text-xs rounded-full bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40 transition-all duration-300 hover:scale-105"
+                style={{animationDelay: `${index * 0.1}s`}}
+              >
+                {cmd}
+              </button>
+            ))}
+          </div>
+          
+          {/* Clear Chat Button */}
+          <button
+            onClick={clearChatHistory}
+            className="px-3 py-1 text-xs rounded-full bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 hover:border-red-500/50 text-red-300 hover:text-red-200 transition-all duration-300 hover:scale-105"
+            title="Clear chat history"
+          >
+            🗑️ Clear
+          </button>
         </div>
       </div>
     </div>

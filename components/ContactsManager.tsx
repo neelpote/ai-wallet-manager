@@ -1,38 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useAppContext } from '@/contexts/AppContext'
 
 interface ContactsManagerProps {
   publicKey: string
 }
 
-interface Contact {
-  name: string
-  address: string
-}
-
 export default function ContactsManager({ publicKey }: ContactsManagerProps) {
-  const [contacts, setContacts] = useState<Contact[]>([])
+  const { state, addContact, removeContact } = useAppContext()
+  const { contacts } = state
   const [showAddForm, setShowAddForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [newAddress, setNewAddress] = useState('')
 
-  const loadContacts = () => {
-    if (!publicKey) return
-    
-    const savedContacts = JSON.parse(localStorage.getItem(`contacts_${publicKey}`) || '{}')
-    const contactList = Object.entries(savedContacts).map(([name, address]) => ({
-      name,
-      address: address as string
-    }))
-    setContacts(contactList)
-  }
-
-  useEffect(() => {
-    loadContacts()
-  }, [publicKey])
-
-  const addContact = () => {
+  const handleAddContact = () => {
     if (!newName.trim() || !newAddress.trim()) return
     
     if (!newAddress.startsWith('G') || newAddress.length !== 56) {
@@ -40,21 +22,19 @@ export default function ContactsManager({ publicKey }: ContactsManagerProps) {
       return
     }
 
-    const savedContacts = JSON.parse(localStorage.getItem(`contacts_${publicKey}`) || '{}')
-    savedContacts[newName.toLowerCase()] = newAddress
-    localStorage.setItem(`contacts_${publicKey}`, JSON.stringify(savedContacts))
+    addContact({
+      name: newName.trim(),
+      address: newAddress.trim(),
+      isTrusted: false
+    })
     
     setNewName('')
     setNewAddress('')
     setShowAddForm(false)
-    loadContacts()
   }
 
-  const deleteContact = (name: string) => {
-    const savedContacts = JSON.parse(localStorage.getItem(`contacts_${publicKey}`) || '{}')
-    delete savedContacts[name.toLowerCase()]
-    localStorage.setItem(`contacts_${publicKey}`, JSON.stringify(savedContacts))
-    loadContacts()
+  const handleDeleteContact = (name: string) => {
+    removeContact(name)
   }
 
   const copyAddress = (address: string) => {
@@ -101,7 +81,7 @@ export default function ContactsManager({ publicKey }: ContactsManagerProps) {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
-              onClick={addContact}
+              onClick={handleAddContact}
               disabled={!newName.trim() || !newAddress.trim()}
               className="w-full px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300"
             >
@@ -136,7 +116,7 @@ export default function ContactsManager({ publicKey }: ContactsManagerProps) {
                   Copy
                 </button>
                 <button
-                  onClick={() => deleteContact(contact.name)}
+                  onClick={() => handleDeleteContact(contact.name)}
                   className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
                 >
                   Delete

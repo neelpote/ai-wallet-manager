@@ -1,18 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAppContext } from '@/contexts/AppContext'
+import WalletLoginForm from './WalletLoginForm'
 
-interface WalletHeaderProps {
-  publicKey: string
-  onKeysChange: (publicKey: string, secretKey: string) => void
-}
-
-export default function WalletHeader({ publicKey, onKeysChange }: WalletHeaderProps) {
-  const [balance, setBalance] = useState<string>('0')
+export default function WalletHeader() {
+  const { state, updateWalletKeys, updateBalance, resetState } = useAppContext()
+  const { publicKey, secretKey, balance } = state
   const [loading, setLoading] = useState(false)
-  const [showKeyInput, setShowKeyInput] = useState(!publicKey)
-  const [inputPublicKey, setInputPublicKey] = useState('')
-  const [inputSecretKey, setInputSecretKey] = useState('')
+  const [connectedWalletName, setConnectedWalletName] = useState('')
 
   const fetchBalance = async () => {
     if (!publicKey) return
@@ -27,7 +23,7 @@ export default function WalletHeader({ publicKey, onKeysChange }: WalletHeaderPr
       
       const data = await response.json()
       if (data.balance !== undefined) {
-        setBalance(data.balance)
+        updateBalance(data.balance)
       }
     } catch (error) {
       console.error('Error fetching balance:', error)
@@ -38,59 +34,22 @@ export default function WalletHeader({ publicKey, onKeysChange }: WalletHeaderPr
 
   useEffect(() => {
     fetchBalance()
+    
+    // Load connected wallet info
+    const walletName = localStorage.getItem('connectedWalletName')
+    if (walletName) {
+      setConnectedWalletName(walletName)
+    }
   }, [publicKey])
 
-  const handleConnect = () => {
-    if (inputPublicKey && inputSecretKey) {
-      // Basic validation
-      if (!inputPublicKey.startsWith('G') || inputPublicKey.length !== 56) {
-        alert('Invalid public key format. Public keys should start with "G" and be 56 characters long.')
-        return
-      }
-      
-      if (!inputSecretKey.startsWith('S') || inputSecretKey.length !== 56) {
-        alert('Invalid secret key format. Secret keys should start with "S" and be 56 characters long.')
-        return
-      }
-      
-      onKeysChange(inputPublicKey, inputSecretKey)
-      setShowKeyInput(false)
-    }
-  }
-
   const handleDisconnect = () => {
-    onKeysChange('', '')
-    setInputPublicKey('')
-    setInputSecretKey('')
-    setShowKeyInput(true)
-    setBalance('0')
+    resetState()
+    setConnectedWalletName('')
+    localStorage.removeItem('connectedWalletType')
+    localStorage.removeItem('connectedWalletName')
   }
 
-  const handleGenerateKeys = async () => {
-    try {
-      const response = await fetch('/api/stellar/generate-keys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      
-      const data = await response.json()
-      
-      if (response.ok && data.publicKey && data.secretKey) {
-        setInputPublicKey(data.publicKey)
-        setInputSecretKey(data.secretKey)
-      } else {
-        // Fallback to working demo keys
-        setInputPublicKey('GDQNY3PBOJOKYZSRMK2S7LHHGWZIUISD4QORETLMXEWXBI7KFZZMKTL3')
-        setInputSecretKey('SCZANGBA5YHTNYVVV4C3U252E2B6P6F5T3U6MM63WBSBZATAQI3EBTQ4')
-      }
-    } catch (error) {
-      // Fallback to working demo keys
-      setInputPublicKey('GDQNY3PBOJOKYZSRMK2S7LHHGWZIUISD4QORETLMXEWXBI7KFZZMKTL3')
-      setInputSecretKey('SCZANGBA5YHTNYVVV4C3U252E2B6P6F5T3U6MM63WBSBZATAQI3EBTQ4')
-    }
-  }
-
-  const isLoginPage = !publicKey && showKeyInput
+  const isLoginPage = !publicKey
 
   return (
     <div className="relative">
@@ -148,89 +107,29 @@ export default function WalletHeader({ publicKey, onKeysChange }: WalletHeaderPr
           </div>
         )}
 
-        {showKeyInput ? (
-          <div className={`space-y-6 ${isLoginPage ? 'max-w-3xl mx-auto' : ''}`}>
-            <div className={`grid gap-6 ${isLoginPage ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
-              <div className="space-y-3">
-                <label className="block text-sm font-semibold text-white mb-2 flex items-center gap-2">
-                  <span className="text-lg">🔑</span>
-                  Public Key
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={inputPublicKey}
-                    onChange={(e) => setInputPublicKey(e.target.value)}
-                    placeholder="GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-                    className="kiro-input pl-12 text-sm font-mono"
-                  />
-                  <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                    G...
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <label className="block text-sm font-semibold text-white mb-2 flex items-center gap-2">
-                  <span className="text-lg">🔐</span>
-                  Secret Key
-                </label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    value={inputSecretKey}
-                    onChange={(e) => setInputSecretKey(e.target.value)}
-                    placeholder="SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-                    className="kiro-input pl-12 text-sm font-mono"
-                  />
-                  <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                    S...
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className={`flex gap-4 ${isLoginPage ? 'flex-col sm:flex-row justify-center' : 'flex-col sm:flex-row'}`}>
-              <button
-                onClick={handleConnect}
-                disabled={!inputPublicKey || !inputSecretKey}
-                className={`kiro-btn kiro-btn-primary hover:scale-105 transition-transform duration-300 ${
-                  isLoginPage ? 'text-xl py-5 px-8' : 'flex-1 text-lg py-4'
-                }`}
-              >
-                <span className="mr-2">🚀</span>
-                Connect Wallet
-              </button>
-              <button
-                onClick={handleGenerateKeys}
-                className={`kiro-btn kiro-btn-ghost hover:scale-105 transition-transform duration-300 ${
-                  isLoginPage ? 'text-lg py-4 px-6' : ''
-                }`}
-              >
-                <span className="mr-2">🔑</span>
-                Generate Keys
-              </button>
-            </div>
-
-            {/* Login Page Footer */}
-            {isLoginPage && (
-              <div className="mt-8 text-center">
-                <div className="kiro-card-premium p-6 text-left">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-3 h-3 rounded-full bg-white/60 animate-pulse-glow"></div>
-                    <p className="font-semibold text-white">⚠️ Development Environment</p>
-                  </div>
-                  <p className="text-gray-300 leading-relaxed">
-                    This wallet operates on Stellar's testnet for safe development and testing. 
-                    Never use mainnet keys or real funds. Get free testnet XLM from the built-in faucet after connecting.
-                  </p>
-                </div>
-              </div>
-            )}
+        {isLoginPage ? (
+          <div className="max-w-3xl mx-auto">
+            <WalletLoginForm />
           </div>
         ) : (
           <div className="space-y-6">
             {/* Wallet Info Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-white/10 via-black/5 to-white/5 border border-white/20 p-4 hover:scale-105 transition-all duration-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-300 mb-1">Connected Wallet</p>
+                    <p className="text-lg font-bold text-white">
+                      {connectedWalletName || 'Manual Entry'}
+                    </p>
+                  </div>
+                  <div className="text-3xl opacity-50 group-hover:opacity-100 transition-opacity duration-300">
+                    🔗
+                  </div>
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              </div>
+
               <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-white/10 via-black/5 to-white/5 border border-white/20 p-4 hover:scale-105 transition-all duration-300">
                 <div className="flex items-center justify-between">
                   <div>

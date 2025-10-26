@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from 'react'
 
-interface SmartContractsProps {
-  publicKey: string
-  secretKey: string
-}
+import { useAppContext } from '@/contexts/AppContext'
 
-export default function SmartContracts({ publicKey, secretKey }: SmartContractsProps) {
+export default function SmartContracts() {
+  const { state, addContact } = useAppContext()
+  const { publicKey, secretKey } = state
   const [loading, setLoading] = useState(false)
   const [contactName, setContactName] = useState('')
   const [contactAddress, setContactAddress] = useState('')
@@ -76,12 +75,21 @@ export default function SmartContracts({ publicKey, secretKey }: SmartContractsP
     }
     
     try {
+      // Save to smart contract
       await callSmartContract('add_contact', {
         contactName,
         contactAddress,
         isTrusted: false
       })
-      alert(`🔗 Contact "${contactName}" added to smart contract successfully!`)
+      
+      // Also save to local context for persistence across pages
+      addContact({
+        name: contactName.trim(),
+        address: contactAddress.trim(),
+        isTrusted: false
+      })
+      
+      alert(`🔗 Contact "${contactName}" added to smart contract and saved locally!`)
       setContactName('')
       setContactAddress('')
     } catch (error: any) {

@@ -2,14 +2,12 @@
 
 import { useState, useEffect } from 'react'
 
-interface SecurityProps {
-  publicKey: string
-  secretKey: string
-}
+import { useAppContext } from '@/contexts/AppContext'
 
-export default function Security({ publicKey, secretKey }: SecurityProps) {
+export default function Security() {
+  const { state, setWalletStatus } = useAppContext()
+  const { publicKey, secretKey, walletStatus } = state
   const [loading, setLoading] = useState(false)
-  const [walletStatus, setWalletStatus] = useState<'active' | 'frozen'>('active')
   const [emergencyContact, setEmergencyContact] = useState('')
   const [walletSettings, setWalletSettings] = useState<any>(null)
 

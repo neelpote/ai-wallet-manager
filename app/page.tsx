@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import WalletHeader from '@/components/WalletHeader'
 import Navbar from '@/components/Navbar'
 import Dashboard from '@/components/pages/Dashboard'
@@ -10,10 +9,12 @@ import SmartContracts from '@/components/pages/SmartContracts'
 import Analytics from '@/components/pages/Analytics'
 import Help from '@/components/pages/Help'
 
+
+import { useAppContext } from '@/contexts/AppContext'
+
 export default function Home() {
-  const [publicKey, setPublicKey] = useState<string>('')
-  const [secretKey, setSecretKey] = useState<string>('')
-  const [activeTab, setActiveTab] = useState<string>('dashboard')
+  const { state, setActiveTab } = useAppContext()
+  const { publicKey, secretKey, activeTab } = state
 
   const renderPage = () => {
     if (!publicKey || !secretKey) {
@@ -44,19 +45,19 @@ export default function Home() {
 
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard publicKey={publicKey} secretKey={secretKey} />
+        return <Dashboard />
       case 'spending':
-        return <SpendingLimits publicKey={publicKey} secretKey={secretKey} />
+        return <SpendingLimits />
       case 'security':
-        return <Security publicKey={publicKey} secretKey={secretKey} />
+        return <Security />
       case 'contracts':
-        return <SmartContracts publicKey={publicKey} secretKey={secretKey} />
+        return <SmartContracts />
       case 'analytics':
-        return <Analytics publicKey={publicKey} secretKey={secretKey} />
+        return <Analytics />
       case 'help':
         return <Help />
       default:
-        return <Dashboard publicKey={publicKey} secretKey={secretKey} />
+        return <Dashboard />
     }
   }
 
@@ -80,13 +81,7 @@ export default function Home() {
         {/* Header - Always show but with different styling for login */}
         <div className={`border-b border-white/10 backdrop-blur-xl bg-gradient-to-r from-white/5 via-black/10 to-white/5 ${!isLoggedIn ? 'border-b-0' : ''}`}>
           <div className={`${isLoggedIn ? 'p-6' : 'p-8'}`}>
-            <WalletHeader 
-              publicKey={publicKey}
-              onKeysChange={(pub, secret) => {
-                setPublicKey(pub)
-                setSecretKey(secret)
-              }}
-            />
+            <WalletHeader />
           </div>
         </div>
         
@@ -97,6 +92,8 @@ export default function Home() {
           </div>
         </div>
       </div>
+      
+
     </div>
   )
 }

@@ -2,16 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import ChatInterface from '../ChatInterface'
+import { useAppContext } from '@/contexts/AppContext'
+import ContractStatus from '@/components/ContractStatus'
 
-interface DashboardProps {
-  publicKey: string
-  secretKey: string
-}
-
-export default function Dashboard({ publicKey, secretKey }: DashboardProps) {
-  const [balance, setBalance] = useState<string>('0')
+export default function Dashboard() {
+  const { state, updateBalance, updateSpendingInfo } = useAppContext()
+  const { publicKey, secretKey, balance, spendingInfo } = state
   const [loading, setLoading] = useState(false)
-  const [spendingInfo, setSpendingInfo] = useState<any>(null)
 
   const fetchBalance = async () => {
     if (!publicKey) return
@@ -26,7 +23,7 @@ export default function Dashboard({ publicKey, secretKey }: DashboardProps) {
       
       const data = await response.json()
       if (data.balance !== undefined) {
-        setBalance(data.balance)
+        updateBalance(data.balance)
       }
     } catch (error) {
       console.error('Error fetching balance:', error)
@@ -49,7 +46,7 @@ export default function Dashboard({ publicKey, secretKey }: DashboardProps) {
       
       const data = await response.json()
       if (response.ok && data.spendingInfo) {
-        setSpendingInfo(data.spendingInfo)
+        updateSpendingInfo(data.spendingInfo)
       }
     } catch (error) {
       console.error('Error fetching spending info:', error)
@@ -232,7 +229,7 @@ export default function Dashboard({ publicKey, secretKey }: DashboardProps) {
                 <div className="w-3 h-3 rounded-full bg-white/60 animate-pulse"></div>
                 <span className="font-medium text-white">Smart Contracts</span>
               </div>
-              <span className="text-white text-xl">✓</span>
+              <ContractStatus />
             </div>
           </div>
         </div>
