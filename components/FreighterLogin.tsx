@@ -74,12 +74,12 @@ export default function FreighterLogin() {
         localStorage.setItem('connectedWalletType', 'freighter')
         localStorage.setItem('connectedWalletName', 'Freighter Wallet')
         
-        setSuccess(`Connected successfully! Public Key: ${result.publicKey.slice(0, 8)}...${result.publicKey.slice(-8)}`)
+        setSuccess(`Connected successfully! Public Key: ${publicKey.slice(0, 8)}...${publicKey.slice(-8)}`)
         
         // Refresh status
         await checkStatus()
       } else {
-        setError(result.error || 'Connection failed')
+        setError('Connection failed')
       }
     } catch (error: any) {
       setError(`Unexpected error: ${error.message}`)

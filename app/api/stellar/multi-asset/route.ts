@@ -109,7 +109,7 @@ async function getPortfolio(publicKey: string) {
 
     // Get other asset balances
     for (const balance of account.balances) {
-      if (balance.asset_type !== 'native') {
+      if (balance.asset_type !== 'native' && balance.asset_type !== 'liquidity_pool_shares') {
         const assetCode = balance.asset_code
         const assetBalance = parseFloat(balance.balance)
         const priceXLM = ASSET_PRICES_XLM[assetCode as keyof typeof ASSET_PRICES_XLM] || 1.0
@@ -293,7 +293,7 @@ async function executeSwap(body: any) {
       if (fromAsset === 'XLM') {
         return b.asset_type === 'native'
       } else {
-        return b.asset_code === fromAsset && b.asset_type !== 'native'
+        return b.asset_type !== 'native' && b.asset_type !== 'liquidity_pool_shares' && b.asset_code === fromAsset
       }
     })
 
@@ -312,7 +312,7 @@ async function executeSwap(body: any) {
 
     // Check if trustline exists for destination asset (if not XLM)
     const needsTrustline = toAsset !== 'XLM' && !account.balances.find(balance => {
-      if (balance.asset_type === 'native') return false
+      if (balance.asset_type === 'native' || balance.asset_type === 'liquidity_pool_shares') return false
       return balance.asset_code === toAsset && balance.asset_issuer === toAssetObj.getIssuer()
     })
 
@@ -601,6 +601,7 @@ async function checkTrustlines(publicKey: string) {
       } else {
         // Check if trustline exists
         const balance = account.balances.find(b => 
+          b.asset_type !== 'native' && b.asset_type !== 'liquidity_pool_shares' &&
           b.asset_code === code && b.asset_issuer === asset.getIssuer()
         )
         
@@ -685,7 +686,7 @@ async function createSwapTransaction(body: any) {
 
     // Check if trustline exists for destination asset (if not XLM)
     const needsTrustline = toAsset !== 'XLM' && !account.balances.find(balance => {
-      if (balance.asset_type === 'native') return false
+      if (balance.asset_type === 'native' || balance.asset_type === 'liquidity_pool_shares') return false
       return balance.asset_code === toAsset && balance.asset_issuer === toAssetObj.getIssuer()
     })
 

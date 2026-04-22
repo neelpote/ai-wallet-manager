@@ -12,15 +12,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Use Stellar's Friendbot to fund testnet accounts
-    const friendbotUrl = `https://friendbot.stellar.org/?addr=${publicKey}`;
+    const friendbotUrl = `https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`;
     
     const response = await fetch(friendbotUrl);
-    
-    if (!response.ok) {
-      throw new Error('Failed to fund account via Friendbot');
-    }
-
     const result = await response.json();
+
+    // Friendbot returns 400 if account already exists/funded — treat as success
+    if (!response.ok) {
+      const errMsg = result?.detail || result?.extras?.result_codes?.transaction || '';
+      if (errMsg.includes('already') || errMsg.includes('op_already_exists') || response.status === 400) {
+        return NextResponse.json({
+          success: true,
+          message: 'Account is already funded on testnet',
+          alreadyFunded: true
+        });
+      }
+      throw new Error(result?.detail || 'Failed to fund account via Friendbot');
+    }
     
     return NextResponse.json({
       success: true,
@@ -33,7 +41,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: error.message || 'Failed to fund account',
-        suggestion: 'Make sure you are using testnet and the public key is valid'
+        suggestion: 'Make sure you are using a valid testnet public key'
       },
       { status: 500 }
     );

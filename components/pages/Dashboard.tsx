@@ -80,7 +80,7 @@ export default function Dashboard() {
           {/* Background glow effect */}
           <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-black/15 to-white/10 rounded-3xl blur-2xl"></div>
           <div className="relative">
-            <ChatInterface publicKey={publicKey} secretKey={secretKey} />
+            <ChatInterface />
           </div>
         </div>
       </div>

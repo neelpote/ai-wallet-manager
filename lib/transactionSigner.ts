@@ -1,4 +1,4 @@
-import { freighterWallet } from './freighterWallet'
+import { signTransaction as freighterSignTx } from './freighterWallet'
 import * as StellarSdk from '@stellar/stellar-sdk'
 
 export class TransactionSigner {
@@ -17,24 +17,19 @@ export class TransactionSigner {
       } else if (walletType === 'freighter') {
         // Sign with Freighter wallet
         const xdr = transaction.toXDR()
-        const result = await freighterWallet.signTransaction(xdr)
-        
-        if (!result.success) {
-          throw new Error(result.error || 'Freighter signing failed')
-        }
-        
-        transaction = StellarSdk.TransactionBuilder.fromXDR(result.signedXdr!, StellarSdk.Networks.TESTNET)
+        const signedXdr = await freighterSignTx(xdr, StellarSdk.Networks.TESTNET)
+        transaction = StellarSdk.TransactionBuilder.fromXDR(signedXdr, StellarSdk.Networks.TESTNET) as StellarSdk.Transaction
       } else {
         throw new Error('No valid signing method available')
       }
 
       // Submit to Stellar network
       const server = new StellarSdk.Horizon.Server('https://horizon-testnet.stellar.org')
-      const result = await server.submitTransaction(transaction)
+      const submitResult = await server.submitTransaction(transaction)
       
       return {
         success: true,
-        hash: result.hash
+        hash: submitResult.hash
       }
     } catch (error: any) {
       return {

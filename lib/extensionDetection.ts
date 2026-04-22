@@ -18,7 +18,7 @@ export const detectInstalledExtensions = async () => {
       const freighterExtensionId = 'bcacfldlkkdogcmkkibnjlakofdplcbk'
       
       // This will work if we can access extension info
-      chrome.runtime.sendMessage(freighterExtensionId, { action: 'ping' }, (response) => {
+      chrome.runtime.sendMessage(freighterExtensionId, { action: 'ping' }, (response: any) => {
         if (chrome.runtime.lastError) {
           // Extension not installed or not accessible
           extensions.freighterInstalled = false

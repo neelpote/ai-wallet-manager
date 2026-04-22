@@ -65,20 +65,6 @@ export default function ContractStatus() {
         })
       }
 
-      if (response.ok) {
-        setContractInfo({
-          isReal: true,
-          contractId,
-          status: 'connected',
-          message: 'Connected to real smart contract on Stellar Testnet'
-        })
-      } else {
-        setContractInfo({
-          isReal: false,
-          status: 'simulation',
-          message: 'Smart contract unavailable, using simulation'
-        })
-      }
     } catch (error) {
       setContractInfo({
         isReal: false,

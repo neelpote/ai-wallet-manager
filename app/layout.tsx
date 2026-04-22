@@ -20,7 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="kiro-dark">
       <head>
-        <script src="/csp-override.js" />
+        <script src="/csp-override.js" async />
       </head>
       <body className={`${inter.className} kiro-scrollbar`}>
         <AppProvider>

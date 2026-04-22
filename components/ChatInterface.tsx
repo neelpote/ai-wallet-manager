@@ -15,8 +15,8 @@ interface Message {
 }
 
 export default function ChatInterface() {
-  const { state, addContact, updateBalance } = useAppContext()
-  const { publicKey, secretKey, contacts } = state
+  const { state, addContact, updateBalance, updateSpendingInfo } = useAppContext()
+  const { publicKey, secretKey, contacts, spendingInfo } = state
   
   const getDefaultWelcomeMessage = (): Message => ({
     id: '1',
@@ -28,6 +28,7 @@ export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([getDefaultWelcomeMessage()])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [pendingCommand, setPendingCommand] = useState<any>(null)
 
   // Load chat history when wallet connects
   useEffect(() => {
@@ -132,6 +133,7 @@ export default function ChatInterface() {
     if (publicKey) {
       localStorage.removeItem(`chat_history_${publicKey}`)
       setMessages([getDefaultWelcomeMessage()])
+      setPendingCommand(null)
     }
   }
 
@@ -219,6 +221,12 @@ export default function ChatInterface() {
       }
       
       switch (parsedCommand.action) {
+        case 'greeting':
+          return `Hey! 👋 I'm your AI wallet assistant. I can help you:\n\n• Check your balance — "What's my balance?"\n• Send XLM — "Send 10 XLM to G..."\n• Swap assets — "Swap 50 XLM to USDC"\n• View portfolio — "Show my portfolio"\n• Check prices — "What are current rates?"\n\nWhat would you like to do?`
+
+        case 'help':
+          return `Here's what I can do:\n\n💰 **Wallet**\n• "What's my balance?"\n• "Show my portfolio"\n• "Transaction history"\n\n📤 **Send**\n• "Send 10 XLM to G..."\n• "Send 5 XLM to Alice"\n\n🔄 **Swap**\n• "Swap 100 XLM to USDC"\n• "Calculate swap 50 XLM to EURC"\n\n🔒 **Security**\n• "Freeze my wallet"\n• "Set daily limit to 500 XLM"\n• "Check spending limits"\n\n👥 **Contacts**\n• "Save G... as Alice"\n• "List contacts"`
+
         case 'balance':
           response = await fetch('/api/stellar/balance', {
             method: 'POST',
@@ -543,8 +551,8 @@ export default function ChatInterface() {
             throw new Error(spendingData.error || 'Failed to get spending info')
           }
           
-          const spendingInfo = spendingData.spendingInfo || {};
-          return `📊 Smart Contract Spending Limits:\n• Daily: ${spendingInfo.dailySpent || 0}/${spendingInfo.dailyLimit || 1000} XLM\n• Monthly: ${spendingInfo.monthlySpent || 0}/${spendingInfo.monthlyLimit || 10000} XLM\n• Status: ${spendingInfo.isFrozen ? '🔒 FROZEN' : '✅ Active'}`
+          const contractSpendingInfo = spendingData.spendingInfo || {};
+          return `📊 Smart Contract Spending Limits:\n• Daily: ${contractSpendingInfo.dailySpent || 0}/${contractSpendingInfo.dailyLimit || 1000} XLM\n• Monthly: ${contractSpendingInfo.monthlySpent || 0}/${contractSpendingInfo.monthlyLimit || 10000} XLM\n• Status: ${contractSpendingInfo.isFrozen ? '🔒 FROZEN' : '✅ Active'}`
           
         case 'reset_spending_limits':
           response = await fetch('/api/stellar/smart-limit', {
@@ -891,6 +899,28 @@ export default function ChatInterface() {
     setLoading(true)
 
     try {
+      // If there's a pending command waiting for confirmation
+      if (pendingCommand) {
+        const isYes = /^(yes|y|confirm|ok|sure|proceed|do it|yep|yeah)$/i.test(userMessage.trim())
+        const isNo = /^(no|n|cancel|stop|abort|nope|nah)$/i.test(userMessage.trim())
+
+        if (isYes) {
+          setPendingCommand(null)
+          const result = await executeCommand(pendingCommand)
+          const conversationalResult = addConversationalTouch(result, pendingCommand)
+          addMessage(conversationalResult, false)
+          setLoading(false)
+          return
+        } else if (isNo) {
+          setPendingCommand(null)
+          addMessage('Cancelled. What else can I help you with?', false)
+          setLoading(false)
+          return
+        } else {
+          // User typed something else — clear pending and process as new command
+          setPendingCommand(null)
+        }
+      }
       // Prepare context for AI
       const context = {
         hasWallet: !!publicKey,
@@ -913,30 +943,18 @@ export default function ChatInterface() {
       console.log('Parsed command:', parsedCommand);
       
       if (!parseResponse.ok) {
-        // Enhanced error handling with suggestions
-        if (parsedCommand.suggestions) {
-          const errorMsg = `${parsedCommand.error}\n\n💡 Suggestions:\n${parsedCommand.suggestions.map((s: string) => `• ${s}`).join('\n')}`
-          addMessage(errorMsg, false)
-        } else {
-          addMessage(`I didn't understand that. ${parsedCommand.error}`, false)
-        }
+        // Show helpful suggestions
+        const errorMsg = parsedCommand.suggestions
+          ? `I didn't quite get that. Try one of these:\n\n${parsedCommand.suggestions.map((s: string) => `• ${s}`).join('\n')}`
+          : `I didn't understand that. Try saying "help" to see what I can do.`
+        addMessage(errorMsg, false)
         return
       }
 
-      // Handle low confidence commands
-      if (parsedCommand.confidence < 0.6) {
-        let confirmationMsg = `I think you want to ${parsedCommand.action.replace('_', ' ')}`
-        if (parsedCommand.suggestions && parsedCommand.suggestions.length > 0) {
-          confirmationMsg += `\n\n🤔 Did you mean:\n${parsedCommand.suggestions.map((s: string) => `• ${s}`).join('\n')}`
-        }
-        confirmationMsg += `\n\nShould I proceed? (Type 'yes' to confirm)`
-        addMessage(confirmationMsg, false)
-        return
-      }
-
-      // Handle commands requiring confirmation
+      // Handle commands requiring confirmation — store and ask
       if (parsedCommand.requiresConfirmation) {
         const confirmationMsg = generateConfirmationMessage(parsedCommand)
+        setPendingCommand(parsedCommand)
         addMessage(confirmationMsg, false)
         return
       }
